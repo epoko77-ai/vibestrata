@@ -7,6 +7,8 @@ on a local dashboard and inside Claude Code. Cleanup goes to the Trash, always u
 
 <p align="center"><a href="README.ko.md">한국어</a> · <a href="#install">Install</a> · <a href="#inside-claude-code">Claude Code</a> · <a href="#states">States</a> · <a href="#what-it-never-does">Safety</a></p>
 
+<p align="center"><a href="docs/intro.mp4"><img src="https://raw.githubusercontent.com/epoko77-ai/vibestrata/main/docs/intro-poster.png" alt="Watch the 37-second intro: folders with names that say nothing get named, sorted and picked up where they stopped" width="72%"></a></p>
+
 ---
 
 Build with Claude Code or Codex for a few months and your home folder fills up: `0614`, `udo`, `test`, `landing-v2` next to `landing-v3`, a report you finished, a tool you use every week, a site that broke on the last prompt and never got fixed. The folder names don't say which is which. Neither does "last modified".

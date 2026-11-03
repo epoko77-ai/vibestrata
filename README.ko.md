@@ -7,6 +7,8 @@
 
 <p align="center"><a href="README.md">English</a> · <a href="#설치">설치</a> · <a href="#claude-code-안에서">Claude Code</a> · <a href="#상태">상태</a> · <a href="#절대-하지-않는-것">안전</a></p>
 
+<p align="center"><a href="docs/intro.mp4"><img src="https://raw.githubusercontent.com/epoko77-ai/vibestrata/main/docs/intro-poster.png" alt="37초 소개 영상 보기 (영어 화면, 소리 없음)" width="72%"></a></p>
+
 ---
 
 Claude Code나 Codex로 몇 달 만들다 보면 홈 폴더가 이렇게 됩니다. `0614`, `udo`, `test`, `landing-v2` 옆의 `landing-v3`. 끝낸 보고서, 매주 쓰는 도구, 마지막 프롬프트에서 깨진 채 멈춘 사이트가 섞여 있는데, 폴더 이름만 봐서는 뭐가 뭔지 모릅니다. "수정한 날짜"도 알려 주지 않습니다.
