@@ -353,7 +353,8 @@ class TestQuarantine(Fixture):
     def test_file_quarantine_and_trash(self) -> None:
         proj = str(self.home / "vibe-draft")
         f = os.path.join(proj, "draft_v2.md")
-        op = self.actions.quarantine([{"project": proj, "path": f, "kind": "file"}])
+        # quarantine first (on Linux a Trash folder always exists, so ask for it), then hand it to the Trash
+        op = self.actions.quarantine([{"project": proj, "path": f, "kind": "file"}], to="quarantine")
         self.assertFalse(os.path.exists(f))
         old = self.actions.sys.platform
         os.environ["XDG_DATA_HOME"] = str(self.home / "files/share")  # "/files" in path on purpose
