@@ -7,7 +7,7 @@
 
 <p align="center"><a href="README.md">English</a> · <a href="#설치">설치</a> · <a href="#claude-code-안에서">Claude Code</a> · <a href="#상태">상태</a> · <a href="#절대-하지-않는-것">안전</a></p>
 
-<p align="center"><a href="https://epoko77-ai.github.io/vibestrata/watch.html"><img src="https://raw.githubusercontent.com/epoko77-ai/vibestrata/main/docs/intro-poster.png" alt="53초 소개 영상 보기 (영어 화면, 소리 없음)" width="72%"></a></p>
+<p align="center"><a href="https://epoko77-ai.github.io/vibestrata/watch.html"><img src="https://raw.githubusercontent.com/epoko77-ai/vibestrata/main/docs/intro.gif" alt="53초 소개 영상: 이름만 봐선 모르는 폴더에 이름과 상태를 붙이고, 멈춘 곳에서 이어 가고, 정리하는 과정 (영어 화면)" width="86%"></a><br><sub>53초, 소리 없음, 영어 화면 · <a href="https://epoko77-ai.github.io/vibestrata/watch.html">고화질로 보기</a></sub></p>
 
 ---
 
