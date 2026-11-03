@@ -1,0 +1,13 @@
+{
+  "description": "When you open Claude Code in a project you've been away from for a few days, say where you left off.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          { "type": "command", "command": "sh", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/brief.sh"], "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}

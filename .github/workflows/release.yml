@@ -1,0 +1,36 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+  id-token: write   # PyPI + npm trusted publishing (no long-lived tokens)
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - name: version matches tag
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          grep -q "__version__ = \"$v\"" vibestrata/__init__.py
+          grep -q "\"version\": \"$v\"" package.json
+          grep -q "\"version\": \"$v\"" plugin/.claude-plugin/plugin.json
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install build && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", registry-url: "https://registry.npmjs.org" }
+      - run: npm publish --provenance --access public
+      - name: GitHub release + Homebrew sha
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          curl -sL "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz" -o src.tgz
+          SHA=$(sha256sum src.tgz | cut -d' ' -f1)
+          sed -e "s#v0.1.0.tar.gz#${GITHUB_REF_NAME}.tar.gz#" -e "s#REPLACE_WITH_RELEASE_SHA256#${SHA}#" packaging/homebrew/vibestrata.rb > vibestrata.rb
+          gh release create "$GITHUB_REF_NAME" --generate-notes vibestrata.rb docs/card.png

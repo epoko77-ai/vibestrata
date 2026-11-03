@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vibestrata"
+dynamic = ["version"]
+description = "Your AI-made projects at a glance: what each one is, where you left off, what is stuck or forgotten. Local dashboard + Claude Code plugin."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "epoko77-ai" }]
+keywords = ["disk-usage", "node_modules", "cleanup", "dashboard", "claude-code", "vibe-coding", "developer-tools"]
+classifiers = [
+  "Environment :: Web Environment",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: System :: Filesystems",
+  "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# a true native window (WKWebView / WebView2) instead of a Chromium --app window
+native = ["pywebview>=5"]
+
+[project.urls]
+Homepage = "https://github.com/epoko77-ai/vibestrata"
+Issues = "https://github.com/epoko77-ai/vibestrata/issues"
+
+[project.scripts]
+vibestrata = "vibestrata.cli:main"
+
+[tool.setuptools]
+packages = ["vibestrata"]
+
+[tool.setuptools.package-data]
+vibestrata = ["static/*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "vibestrata.__version__" }

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="vibestrata-token" content="__VIBESTRATA_TOKEN__">
+<meta name="vibestrata-version" content="__VIBESTRATA_VERSION__">
+<title>vibestrata — project map</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23F1ECE2'/%3E%3Crect y='2' width='16' height='3' fill='%23C2461F'/%3E%3Crect y='6' width='16' height='3' fill='%23C8912A'/%3E%3Crect y='10' width='16' height='2' fill='%235B6C7A'/%3E%3Crect y='13' width='16' height='3' fill='%23A79C86'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="sheet">
+  <div class="titleblock">
+    <div class="brand"><h1>vibestrata</h1><span class="no" data-t="sheet"></span></div>
+    <div class="meta" id="meta"></div>
+    <div class="controls">
+      <button class="btn ghost lang" id="lang">한/EN</button>
+      <button class="btn" id="rescan" data-t="rescan"></button>
+      <button class="btn ghost" id="quit" data-t="quit" hidden></button>
+    </div>
+  </div>
+  <div class="progress" id="progress"><i></i></div>
+
+  <section class="lede">
+    <div class="lede-main">
+      <p id="lede">&nbsp;</p>
+      <div class="board" id="board"></div>
+    </div>
+    <div class="ledger-mini" id="mini"></div>
+  </section>
+
+  <div class="section-head">
+    <h2 data-t="strata_title"></h2>
+    <span class="note" data-t="strata_note"></span>
+    <span class="right"><button class="btn sm" id="share" data-t="share"></button></span>
+  </div>
+  <div class="strata-wrap">
+    <svg id="strata" role="img" aria-label="Strata chart of projects by last activity"></svg>
+    <div class="tip" id="tip"></div>
+  </div>
+
+  <div class="toolbar">
+    <input class="search" id="q" type="search" autocomplete="off">
+    <div class="chipset" id="statusChips"></div>
+    <label class="toggle"><input type="checkbox" id="fUnsaved"><span data-t="only_unsaved"></span></label>
+    <label class="toggle"><input type="checkbox" id="fReclaim"><span data-t="only_reclaim"></span></label>
+    <label class="toggle"><input type="checkbox" id="fPinned"><span data-t="only_pinned"></span></label>
+    <span class="spacer"></span>
+    <button class="btn sm ghost" id="legendBtn" data-t="legend" aria-pressed="false"></button>
+    <select class="sort" id="sort"></select>
+  </div>
+  <div class="legend" id="legend" hidden></div>
+
+  <table class="ledger">
+    <thead><tr>
+      <th class="pick"><input type="checkbox" id="pickAll" aria-label="select all"></th>
+      <th data-t="col_project"></th>
+      <th data-t="col_last"></th>
+      <th class="c-pulse" data-t="col_pulse"></th>
+      <th class="num" data-t="col_size"></th>
+      <th class="c-status" data-t="col_state"></th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="empty" id="empty" hidden></div>
+
+  <div class="section-head" style="padding-top:46px">
+    <h2 data-t="log"></h2>
+    <span class="note" data-t="log_note"></span>
+  </div>
+  <div class="log" id="log"></div>
+
+  <footer class="colophon">
+    <span data-t="privacy"></span>
+    <span>vibestrata v__VIBESTRATA_VERSION__ · MIT</span>
+  </footer>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true"></aside>
+<div class="modal" id="modal"><div class="card" id="modalCard"></div></div>
+<div class="selbar" id="selbar"></div>
+<div class="toast" id="toast"></div>
+
+<script src="/static/strings.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

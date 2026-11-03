@@ -1,0 +1,14 @@
+{
+  "name": "vibestrata",
+  "description": "vibestrata \u2014 your AI-made projects at a glance, from Claude Code: what each is, where you left off, what's stuck or forgotten.",
+  "owner": {
+    "name": "epoko77-ai"
+  },
+  "plugins": [
+    {
+      "name": "vibestrata",
+      "source": "./plugin",
+      "description": "Your AI-made projects at a glance, from inside Claude Code: what each one is, where you left off, what's stuck or forgotten. Says where you stopped when you come back to a project. Cleanup goes to the Trash, always undoable."
+    }
+  ]
+}

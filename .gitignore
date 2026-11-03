@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+.DS_Store
+.pytest_cache/
+*.tgz
+vibestrata.egg-info/
+dustoff.egg-info/
