@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Your AI-made projects at a glance: what each one is, where you left off, what is stuck or forgotten. Local dashboard + Claude Code plugin. Cleanup goes to the Trash, always undoable.",
   "bin": { "vibestrata": "bin/vibestrata.js" },
-  "files": ["bin/", "vibestrata/", "README.md", "LICENSE"],
+  "files": ["bin/", "vibestrata/", "!**/__pycache__/**", "!**/*.pyc", "README.md", "LICENSE"],
   "keywords": ["claude-code", "codex", "vibe-coding", "projects", "dashboard", "resume", "developer-tools", "cleanup", "node_modules"],
   "homepage": "https://github.com/epoko77-ai/vibestrata",
   "repository": { "type": "git", "url": "git+https://github.com/epoko77-ai/vibestrata.git" },
