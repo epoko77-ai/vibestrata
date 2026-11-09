@@ -103,7 +103,7 @@ def print_summary(result: dict) -> None:
     print("- **States:** " + " · ".join(f"{k} {sum(1 for p in ps if eff[p['id']] == k)}" for k in segment.USER_STATES
                                         if any(eff[p["id"]] == k for p in ps)))
     print(f"- **Disk:** {human(t['bytes'])} · rebuildable {human(t['reclaim'])} (node_modules, .venv, caches) · "
-          f"leftovers {human(t.get('byproducts', 0))} (`_workspace`, older versions)")
+          f"leftovers in finished projects {human(brief.finished_leftovers(ps, st))} (`_workspace`, older versions)")
 
     def section(title: str, rows: list, line) -> None:
         if rows:
@@ -127,7 +127,7 @@ def print_summary(result: dict) -> None:
     if tools:
         print("\n### Tools in use\n")
         print(", ".join(name(p) for p in tools))
-    done = sorted((p for p in ps if eff[p["id"]] in ("delivered", "superseded") and (p.get("byproducts") or {}).get("bytes", 0) > 0),
+    done = sorted((p for p in ps if eff[p["id"]] in segment.FINISHED and (p.get("byproducts") or {}).get("bytes", 0) > 0),
                   key=lambda p: -p["byproducts"]["bytes"])
     section("Done, with leftovers", done[:8],
             lambda p: f"- **{name(p)}** ({eff[p['id']]}) — {human(p['byproducts']['bytes'])} of leftovers"
@@ -171,6 +171,28 @@ def sweep_items(result: dict, st: dict, states: Optional[set], byproducts: bool)
     return items
 
 
+def byproducts_withheld(result: dict, st: dict, states: Optional[set] = None) -> str:
+    """Why ``--byproducts`` found nothing to add, in one line."""
+    th = result["thresholds"]
+    pins = set(st.get("pins", []))
+    have = [p for p in result["projects"] if (p.get("byproducts") or {}).get("bytes", 0) > 0
+            and effective_status(p, st) in segment.FINISHED and (states is None or effective_status(p, st) in states)]
+    if not have:
+        return "No byproducts eligible: no finished project has leftovers."
+    pinned = sum(1 for p in have if p["id"] in pins)
+    unsaved = sum(1 for p in have if p["id"] not in pins and not segment.plan_for(p, st, th)["byproducts"])
+    kept = len(have) - pinned - unsaved   # every item holds a deliverable or code, or the project's CLAUDE.md names it
+    n = len(have)
+    if unsaved == n:
+        return (f"No byproducts eligible: the {n} finished project{'s' if n > 1 else ''} with leftovers "
+                f"{'all have' if n > 1 else 'has'} unsaved work. Commit and push first, or tick them in the dashboard.")
+    parts = [f"{unsaved} {'have' if unsaved > 1 else 'has'} unsaved work" if unsaved else "",
+             f"{pinned} pinned" if pinned else "",
+             f"{kept} keep theirs (they hold deliverables or code, or the project's CLAUDE.md names them)" if kept else ""]
+    return (f"No byproducts eligible among the {n} finished project{'s' if n > 1 else ''} with leftovers: "
+            + ", ".join(x for x in parts if x) + ".")
+
+
 def cmd_sweep(args: argparse.Namespace) -> int:
     from .config import load_state
 
@@ -186,8 +208,11 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     items = sweep_items(result, st, wanted, args.byproducts)
     total = sum(i["bytes"] for i in items)
     scope = "+".join(sorted(wanted)) if wanted else "by state"
+    why_none = byproducts_withheld(result, st, wanted) if args.byproducts and not any(i["group"] == "byproduct" for i in items) else ""
     if not items:
         print(f"Nothing to sweep ({scope}).")
+        if why_none:
+            print(why_none)
         return 0
     shown = items if args.all else items[:25]
     for i in shown:
@@ -199,6 +224,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     n_by = sum(1 for i in items if i["group"] == "byproduct")
     print(f"\n{len(items)} items · {human(total)} ({scope}; tier-1 dependencies and caches"
           + (f", plus {n_by} byproducts from finished projects" if n_by else "") + ")")
+    if why_none:
+        print(why_none)
     if not args.byproducts:
         extra = sweep_items(result, st, wanted, True)
         more = sum(i["bytes"] for i in extra if i["group"] == "byproduct")

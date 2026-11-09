@@ -34,7 +34,7 @@ T = {
         "forgot": "Forgotten (45+ days, most recent first)",
         "building": "In progress",
         "tools": "Tools in use",
-        "disk": "{t} on disk · {r} rebuildable · {b} leftovers",
+        "disk": "{t} on disk · {r} rebuildable · {b} leftovers in finished projects",
         "now": "now: ",
         "ago": "{d}d ago",
         "today": "today",
@@ -70,7 +70,7 @@ T = {
         "forgot": "잊고 있던 것 (45일 넘음, 최근 순)",
         "building": "만드는 중",
         "tools": "쓰고 있는 도구",
-        "disk": "디스크 {t} · 다시 설치되는 것 {r} · 작업 찌꺼기 {b}",
+        "disk": "디스크 {t} · 다시 설치되는 것 {r} · 끝난 프로젝트의 작업 찌꺼기 {b}",
         "now": "지금: ",
         "ago": "{d}일 전",
         "today": "오늘",
@@ -180,6 +180,13 @@ def reg_label(label: str, lang: str) -> str:
 def _unsaved(u: Dict[str, Any], lang: str) -> str:
     tpl = UNSAVED.get(lang, UNSAVED["en"])
     return " · ".join(tpl[k].replace("{n}", str(u[k])) for k in ("dirty", "unpushed", "no_remote") if u.get(k))
+
+
+def finished_leftovers(projects: List[Dict[str, Any]], st: Dict[str, Any]) -> int:
+    """Leftovers (``_workspace``, older versions) in projects whose state lets
+    ``sweep --byproducts`` consider them: the figure the summary lists."""
+    return sum((p.get("byproducts") or {}).get("bytes", 0) for p in projects
+               if segment.effective(p, st) in segment.FINISHED)
 
 
 def situation(p: Dict[str, Any], st: Dict[str, Any], lang: str = "en") -> List[str]:
@@ -329,7 +336,7 @@ def overview(result: Dict[str, Any], st: Dict[str, Any], lang: Optional[str] = N
         names = ", ".join(title(p, st) for p in tools[:8]) + (f" +{len(tools) - 8}" if len(tools) > 8 else "")
         lines.append(f"  ◆ {B(_t(lang, 'tools'))} {D(str(len(tools)))}  {_cut(names, width - 24)}")
     t = result.get("totals") or {}
-    lines += ["", "  " + D(_t(lang, "disk", t=_human(t.get("bytes", 0)), r=_human(t.get("reclaim", 0)), b=_human(t.get("byproducts", 0))))]
+    lines += ["", "  " + D(_t(lang, "disk", t=_human(t.get("bytes", 0)), r=_human(t.get("reclaim", 0)), b=_human(finished_leftovers(ps, st))))]
     if url:
         lines.append("  " + _t(lang, "open", url=url))
     lines.append("")

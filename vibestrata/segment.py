@@ -48,6 +48,8 @@ LEGACY_STATES = {"keep": "in-use"}
 # how the list groups them: doing now · done · unfinished
 GROUPS = (("now", ("active",)), ("done", ("in-use", "delivered", "superseded")),
           ("unfinished", ("blocked", "paused", "one-shot", "closed")))
+# states whose leftovers sweep --byproducts may take (see plan())
+FINISHED = ("delivered", "superseded", "closed")
 TOOL_SOURCES = ("skill:", "agent:", "command:", "launch agent:", "mcp:", "shell config")
 
 DELIVERABLE_EXT = {".pdf", ".pptx", ".key", ".docx", ".xlsx", ".hwp", ".hwpx", ".epub", ".mp4", ".mov", ".m4v"}
@@ -588,7 +590,7 @@ def plan(state: str, p: Dict[str, Any], th: Dict[str, int]) -> Dict[str, bool]:
     stale = days >= th["cooling"]
     regen = state in ("delivered", "superseded", "one-shot", "closed") or stale
     gate = not (p.get("flags") or {}).get("unsaved")
-    byp = state in ("delivered", "superseded", "closed") and gate
+    byp = state in FINISHED and gate
     return {"regen": regen, "byproducts": byp}
 
 

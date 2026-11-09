@@ -540,6 +540,7 @@ class TestCli(Fixture):
         self.assertIn("## vibestrata survey", out)
         self.assertIn("**Seed deck (`deck-job`)**", out)          # readable name, folder alongside
         self.assertIn("**codex-app** (30d) — “the sync still fails, same error”", out)
+        self.assertIn("leftovers in finished projects", out)
         # make py-app look fossil so the sweep has something to do
         from vibestrata.config import update_state
         pid = self.by_name["py-app"]["id"]
@@ -893,6 +894,42 @@ class TestRules(unittest.TestCase):
         from vibestrata.claude import redact
         self.assertEqual(redact("AIzaSyDb1PhhzMjWOs-jzsBwUj0gdtI1bFy9Wj4"), "[redacted]")
         self.assertEqual(redact("see verifiable-graphrag-manuscript-ko-v1.pdf"), "see verifiable-graphrag-manuscript-ko-v1.pdf")
+
+
+class TestLeftovers(unittest.TestCase):
+    """The leftovers figure and --byproducts say what sweep can actually take."""
+
+    @staticmethod
+    def proj(i: int, state: str, nbytes: int, unsaved: bool = False) -> dict:
+        return {"id": f"p{i}", "name": f"p{i}", "path": f"/p{i}", "state": state, "days": 90, "candidates": [],
+                "byproducts": {"bytes": nbytes, "items": [{"path": f"/p{i}/_workspace", "rel": "_workspace", "bytes": nbytes,
+                                                          "kind": "workspace", "auto": True}]},
+                "flags": {"unsaved": {"dirty": 3}} if unsaved else {}}
+
+    def test_header_counts_finished_projects_only(self) -> None:
+        from vibestrata import brief
+        st = {"overrides": {}, "labels": {}, "pins": []}
+        ps = [self.proj(1, "delivered", 100), self.proj(2, "paused", 10_000), self.proj(3, "superseded", 20)]
+        self.assertEqual(brief.finished_leftovers(ps, st), 120)
+        res = {"projects": ps, "totals": {"bytes": 1, "reclaim": 0, "byproducts": 10_120}}
+        self.assertIn("120 B leftovers in finished projects", brief.overview(res, st, "en"))
+
+    def test_byproducts_withheld(self) -> None:
+        from vibestrata import cli
+        th = {"active": 14, "cooling": 45, "dormant": 120}
+        st = {"overrides": {}, "labels": {}, "pins": []}
+        res = {"thresholds": th, "projects": [self.proj(1, "delivered", 100, True), self.proj(2, "superseded", 50, True)]}
+        self.assertEqual(cli.sweep_items(res, st, None, True), [])
+        self.assertEqual(cli.byproducts_withheld(res, st),
+                         "No byproducts eligible: the 2 finished projects with leftovers all have unsaved work. "
+                         "Commit and push first, or tick them in the dashboard.")
+        st["pins"] = ["p2"]
+        self.assertIn("1 has unsaved work, 1 pinned", cli.byproducts_withheld(res, st))
+        self.assertEqual(cli.byproducts_withheld({"thresholds": th, "projects": [self.proj(3, "paused", 9)]}, st),
+                         "No byproducts eligible: no finished project has leftovers.")
+        # once the work is saved, it is offered
+        res["projects"][0]["flags"] = {}
+        self.assertEqual([i["path"] for i in cli.sweep_items(res, st, None, True) if i["group"] == "byproduct"], ["/p1/_workspace"])
 
 
 if __name__ == "__main__":
