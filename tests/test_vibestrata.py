@@ -617,6 +617,22 @@ class TestIdentity(unittest.TestCase):
         self.assertEqual(identity.title_from_doc(title, "udo"), "우도 여행")
         self.assertEqual(identity.title_from_doc("Install", "x"), "")
 
+    def test_html_readme(self) -> None:
+        from vibestrata import identity
+        readme = ('<p align="center"><img src="https://x/shot.png" alt="the dashboard" width="100%"></p>\n\n'
+                  '<h1 align="center"><i>vibestrata</i></h1>\n'
+                  '<p align="center"><b>Your AI-made projects, at a glance.</b><br>\n'
+                  'What each one is &amp; where you left off,<br>\n'
+                  'on a local dashboard.</p>\n\n'
+                  '<p align="center"><a href="README.ko.md">한국어</a> · <a href="#install">Install</a></p>\n\n'
+                  '<!--\nbadges go here\n-->\n\n## Install\n\nnpx vibestrata\n')
+        title, para = identity.describe([("README.md", readme)])
+        self.assertEqual(title, "vibestrata")
+        self.assertEqual(para, "Your AI-made projects, at a glance. What each one is & where you left off, on a local dashboard.")
+        self.assertEqual(identity.name({"name": "cleanup-project", "doc_title": title, "doc_para": para})["title"], "vibestrata")
+        # comparisons in plain Markdown are not tags
+        self.assertEqual(identity.describe([("README.md", "# T\n\nruns if a < b and c > d, fast\n")])[1], "runs if a < b and c > d, fast")
+
     def test_first_real_ask(self) -> None:
         from vibestrata import identity
         asks = [[1, "claude logout"], [2, "쓸수 있는 스킬 확인"], [3, "codex cli 설치해"],

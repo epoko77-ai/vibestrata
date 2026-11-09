@@ -10,6 +10,7 @@ the triage skill can propose the rest, and you can always rename.
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -91,6 +92,26 @@ def read_docs(path: str, limit: int = 20000) -> List[Tuple[str, str]]:
     return out
 
 
+# READMEs that open in HTML: <h1 align="center">…</h1>, <p><img …></p>, a row of links.
+HTML_HEAD = re.compile(r"^<h([1-6])\b[^>]*>(.*?)</h\1\s*>", re.I)
+HTML_TEXT = re.compile(r"^</?(?:p|b|strong|i|em|span|br|h[1-6])\b", re.I)
+HTML_TAG = re.compile(r"</?[A-Za-z][^>]*>")
+HTML_LINK = re.compile(r"<a\b[^>]*>(.*?)</a\s*>", re.I | re.S)
+
+
+def strip_html(s: str) -> str:
+    """Text without tags and entities; <br> becomes a space."""
+    s = re.sub(r"<br\s*/?>", " ", s, flags=re.I)
+    return " ".join(html.unescape(HTML_TAG.sub("", s)).split())
+
+
+def _nav_row(s: str) -> bool:
+    """A row of links ("한국어 · Install · Safety") or badges, not prose."""
+    if len(HTML_LINK.findall(s)) < 2:
+        return False
+    return not re.sub(r"[\s·|•/,\-–—]+", "", strip_html(HTML_LINK.sub("", s)))
+
+
 def describe(docs: List[Tuple[str, str]]) -> Tuple[str, str]:
     """(title, first paragraph about the project) from the first doc that has
     either. Paragraphs about the file itself ("이 파일이 SSOT…") and framework
@@ -100,13 +121,28 @@ def describe(docs: List[Tuple[str, str]]) -> Tuple[str, str]:
         if BOILERPLATE.search(text[:600]):
             continue
         title, paras, cur = "", [], []
-        fence = False
+        fence = comment = False
         for ln in text.splitlines():
             s = ln.strip()
             if s.startswith("```"):
                 fence = not fence
                 continue
-            if fence or s.startswith(("<", "|", "---", "![", "[!", "@")):
+            if fence:
+                continue
+            if comment or s.startswith("<!--"):
+                comment = "-->" not in s
+                continue
+            if s.startswith("<"):
+                h = HTML_HEAD.match(s)
+                if h:
+                    s = "#" * int(h.group(1)) + " " + strip_html(h.group(2))   # a heading, below
+                elif HTML_TEXT.match(s) and not _nav_row(s) and strip_html(s):
+                    s = strip_html(s)                                       # prose in a <p>
+                else:
+                    s = ""                                                  # images, badges, links, wrappers
+            elif HTML_TAG.search(s):
+                s = strip_html(s)
+            if s.startswith(("<", "|", "---", "![", "[!", "@")):
                 continue
             if not s or s.startswith("#"):
                 if cur:
