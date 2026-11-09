@@ -4,4 +4,4 @@ Find the projects you forgot, see what they weigh, and move the regenerable
 weight out of the way. Nothing is ever deleted; every action has an undo.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

@@ -1,6 +1,6 @@
 {
   "name": "vibestrata",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Your AI-made projects at a glance, from inside Claude Code: what each one is, where you left off, what's stuck or forgotten. Says where you stopped when you come back to a project. Cleanup goes to the Trash, always undoable.",
   "author": { "name": "epoko77-ai" },
   "homepage": "https://github.com/epoko77-ai/vibestrata",
