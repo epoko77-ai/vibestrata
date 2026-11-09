@@ -5,77 +5,96 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="vibestrata-token" content="__VIBESTRATA_TOKEN__">
 <meta name="vibestrata-version" content="__VIBESTRATA_VERSION__">
+<meta name="color-scheme" content="light dark">
 <title>vibestrata — project map</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23F1ECE2'/%3E%3Crect y='2' width='16' height='3' fill='%23C2461F'/%3E%3Crect y='6' width='16' height='3' fill='%23C8912A'/%3E%3Crect y='10' width='16' height='2' fill='%235B6C7A'/%3E%3Crect y='13' width='16' height='3' fill='%23A79C86'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23F1ECE2'/%3E%3Crect y='2' width='16' height='3' fill='%23C2461F'/%3E%3Crect y='6' width='16' height='3' fill='%23C8912A'/%3E%3Crect y='10' width='16' height='2' fill='%235B6C7A'/%3E%3Crect y='13' width='16' height='3' fill='%23A79C86'/%3E%3C/svg%3E">
+<script src="/static/theme.js"></script>
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<div class="sheet">
-  <div class="titleblock">
-    <div class="brand"><h1>vibestrata</h1><span class="no" data-t="sheet"></span></div>
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><b>vibestrata</b><span class="brand-sub" data-t="sheet"></span></div>
     <div class="meta" id="meta"></div>
     <div class="controls">
-      <button class="btn ghost lang" id="lang">한/EN</button>
-      <button class="btn" id="rescan" data-t="rescan"></button>
-      <button class="btn ghost" id="quit" data-t="quit" hidden></button>
+      <button class="btn ghost sm" id="theme" type="button"></button>
+      <button class="btn ghost sm" id="lang" type="button">한/EN</button>
+      <button class="btn primary sm" id="rescan" type="button" data-t="rescan"></button>
+      <button class="btn ghost sm" id="quit" type="button" data-t="quit" hidden></button>
     </div>
   </div>
   <div class="progress" id="progress"><i></i></div>
+</header>
 
-  <section class="lede">
-    <div class="lede-main">
-      <p id="lede">&nbsp;</p>
-      <div class="board" id="board"></div>
+<main class="page" id="page">
+  <div class="page-head">
+    <div>
+      <h1 data-t="page_title"></h1>
+      <p class="lede" id="lede">&nbsp;</p>
     </div>
-    <div class="ledger-mini" id="mini"></div>
+  </div>
+
+  <section class="kpis" id="kpis" aria-label="summary"></section>
+  <section class="board" id="board"></section>
+
+  <section class="card chart-card">
+    <div class="card-head">
+      <h2 data-t="strata_title"></h2>
+      <span class="hint" data-t="strata_note"></span>
+      <span class="right"><button class="btn sm" id="share" type="button" data-t="share"></button></span>
+    </div>
+    <div class="strata-wrap">
+      <svg id="strata" role="img" aria-label="Projects by last activity"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
   </section>
 
-  <div class="section-head">
-    <h2 data-t="strata_title"></h2>
-    <span class="note" data-t="strata_note"></span>
-    <span class="right"><button class="btn sm" id="share" data-t="share"></button></span>
-  </div>
-  <div class="strata-wrap">
-    <svg id="strata" role="img" aria-label="Strata chart of projects by last activity"></svg>
-    <div class="tip" id="tip"></div>
-  </div>
+  <section class="card table-card" id="tableCard">
+    <div class="card-head">
+      <h2 data-t="projects_title"></h2>
+      <span class="count" id="count"></span>
+      <span class="right"><button class="btn sm ghost" id="legendBtn" type="button" data-t="legend" aria-pressed="false"></button></span>
+    </div>
+    <div class="tabs" id="statusChips" role="toolbar"></div>
+    <div class="toolbar">
+      <div class="search-box">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.8"/><path d="m10.6 10.6 3.4 3.4" stroke-linecap="round"/></svg>
+        <input class="search" id="q" type="search" autocomplete="off">
+      </div>
+      <label class="pill"><input type="checkbox" id="fReclaim"><span data-t="only_reclaim"></span></label>
+      <label class="pill"><input type="checkbox" id="fUnsaved"><span data-t="only_unsaved"></span></label>
+      <label class="pill"><input type="checkbox" id="fPinned"><span data-t="only_pinned"></span></label>
+      <span class="spacer"></span>
+      <label class="sort-wrap"><span data-t="sort_label"></span><select class="sort" id="sort"></select></label>
+    </div>
+    <div class="legend" id="legend" hidden></div>
+    <table class="ledger">
+      <thead><tr>
+        <th class="pick"><input type="checkbox" id="pickAll" aria-label="select all"></th>
+        <th><button class="sortbtn" type="button" data-sort="name" data-t="col_project"></button></th>
+        <th class="c-status"><button class="sortbtn" type="button" data-sort="state" data-t="col_state"></button></th>
+        <th class="c-last"><button class="sortbtn" type="button" data-sort="last" data-t="col_last"></button></th>
+        <th class="num c-size"><button class="sortbtn" type="button" data-sort="bytes" data-t="col_size"></button></th>
+        <th class="c-pulse" data-t="col_pulse"></th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden></div>
+  </section>
 
-  <div class="toolbar">
-    <input class="search" id="q" type="search" autocomplete="off">
-    <div class="chipset" id="statusChips"></div>
-    <label class="toggle"><input type="checkbox" id="fUnsaved"><span data-t="only_unsaved"></span></label>
-    <label class="toggle"><input type="checkbox" id="fReclaim"><span data-t="only_reclaim"></span></label>
-    <label class="toggle"><input type="checkbox" id="fPinned"><span data-t="only_pinned"></span></label>
-    <span class="spacer"></span>
-    <button class="btn sm ghost" id="legendBtn" data-t="legend" aria-pressed="false"></button>
-    <select class="sort" id="sort"></select>
-  </div>
-  <div class="legend" id="legend" hidden></div>
-
-  <table class="ledger">
-    <thead><tr>
-      <th class="pick"><input type="checkbox" id="pickAll" aria-label="select all"></th>
-      <th data-t="col_project"></th>
-      <th data-t="col_last"></th>
-      <th class="c-pulse" data-t="col_pulse"></th>
-      <th class="num" data-t="col_size"></th>
-      <th class="c-status" data-t="col_state"></th>
-    </tr></thead>
-    <tbody id="rows"></tbody>
-  </table>
-  <div class="empty" id="empty" hidden></div>
-
-  <div class="section-head" style="padding-top:46px">
-    <h2 data-t="log"></h2>
-    <span class="note" data-t="log_note"></span>
-  </div>
-  <div class="log" id="log"></div>
+  <section class="card log-card">
+    <div class="card-head">
+      <h2 data-t="log"></h2>
+      <span class="hint" data-t="log_note"></span>
+    </div>
+    <div class="log" id="log"></div>
+  </section>
 
   <footer class="colophon">
     <span data-t="privacy"></span>
     <span>vibestrata v__VIBESTRATA_VERSION__ · MIT</span>
   </footer>
-</div>
+</main>
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>

@@ -3,6 +3,14 @@
   "use strict";
 
   const TOKEN = document.querySelector('meta[name="vibestrata-token"]').content;
+  // per-viewer conveniences only (language, theme, sort); the page works without storage
+  function store(k, v) {
+    try {
+      if (v === undefined) return localStorage.getItem(k);
+      if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v);
+    } catch (e) { /* storage blocked */ }
+    return null;
+  }
   const $ = (s, el = document) => el.querySelector(s);
   const SVGNS = "http://www.w3.org/2000/svg";
   const DAY = 86400;
@@ -11,14 +19,18 @@
   const USER_STATES = [...STATES, "closed"];
   const GROUPS = [["now", ["active"]], ["done", ["in-use", "delivered", "superseded"]], ["unfinished", ["blocked", "paused", "one-shot", "closed"]]];
   const groupOf = (s) => (GROUPS.find(([, ss]) => ss.includes(s)) || GROUPS[2])[0];
+  // the share card is a fixed light image, so it keeps literal colours; the page uses theme tokens
   const COLORS = { active: "#C2461F", "in-use": "#2B4C7E", delivered: "#3F6B4E", superseded: "#5B6C7A", blocked: "#7B3B63", paused: "#C8912A", "one-shot": "#A79C86", closed: "#BDB3A0" };
-  const COMP_COLORS = { source: "#1D1A15", git: "#7C7466", deps: "#C2461F", cache: "#C8912A", build: "#5B6C7A", output: "#A79C86" };
+  const stc = (s) => `var(--st-${USER_STATES.includes(s) ? s : "paused"})`;
+  const compc = (k) => `var(--comp-${k}, var(--ink-3))`;
+  const THEMES = ["auto", "light", "dark"];
 
   const S = {
     data: null, state: { pins: [], overrides: {}, labels: {}, names: {}, notes: {} }, progress: {}, ops: [],
-    lang: localStorage.getItem("vibestrata.lang") || ((navigator.language || "en").startsWith("ko") ? "ko" : "en"),
+    lang: store("vibestrata.lang") || ((navigator.language || "en").startsWith("ko") ? "ko" : "en"),
+    theme: THEMES.includes(store("vibestrata.theme")) ? store("vibestrata.theme") : "auto",
     f: { q: "", status: "all", reclaim: false, unsaved: false, pinned: false },
-    sort: localStorage.getItem("vibestrata.sort2") || "state",
+    sort: store("vibestrata.sort2") || "state",
     sel: null, picks: new Set(), checked: new Set(), hover: null, editing: false, legend: false,
   };
 
@@ -172,9 +184,27 @@
     document.documentElement.lang = S.lang;
     document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = t(el.dataset.t); });
     $("#q").placeholder = t("search");
+    $("#q").setAttribute("aria-label", t("search"));
     const sort = $("#sort");
     sort.innerHTML = Object.keys(window.STRINGS.en.sort).map((k) => `<option value="${k}">${esc(t("sort." + k))}</option>`).join("");
     sort.value = S.sort;
+    renderSortHeads();
+    renderTheme();
+  }
+  function renderSortHeads() {
+    document.querySelectorAll(".ledger .sortbtn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.sort === S.sort)));
+  }
+  function applyTheme() {
+    if (S.theme === "auto") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = S.theme;
+  }
+  function renderTheme() {
+    const b = $("#theme");
+    if (!b) return;
+    const icon = { auto: "◐", light: "☀", dark: "☾" }[S.theme];
+    b.textContent = icon;
+    b.title = t("theme." + S.theme);
+    b.setAttribute("aria-label", t("theme." + S.theme));
   }
   function renderProgress() {
     const pr = S.progress || {};
@@ -196,11 +226,10 @@
   function renderMeta() {
     const d = S.data;
     const cur = (S.progress.current || []).slice(0, 2).join(", ");
-    $("#meta").innerHTML = d ? (d.demo ? `<span>mode<b class="mono" style="color:var(--signal)">DEMO · synthetic</b></span>` : "") + `
-      <span>${esc(t("scanned"))}<b>${esc(new Date(d.scanned_at * 1000).toLocaleString(S.lang === "ko" ? "ko-KR" : "en-US", { dateStyle: "medium", timeStyle: "short" }))}</b></span>
-      <span>root<b class="mono">${esc(d.home)}</b></span>
-      <span>scan<b class="mono">${d.scan_seconds}s</b></span>
-      ${S.progress.running && cur ? `<span>${esc(t("surveying"))}<b class="mono">${esc(cur)}</b></span>` : ""}` : "";
+    $("#meta").innerHTML = d ? (d.demo ? `<span class="badge-demo">DEMO</span>` : "") + `
+      <span>${esc(t("scanned"))} <b>${esc(new Date(d.scanned_at * 1000).toLocaleString(S.lang === "ko" ? "ko-KR" : "en-US", { dateStyle: "medium", timeStyle: "short" }))}</b></span>
+      <span class="mono" title="${esc(d.scan_seconds)}s">${esc(d.home)}</span>
+      ${S.progress.running && cur ? `<span>${esc(t("surveying"))} <b class="mono">${esc(cur)}</b></span>` : ""}` : "";
   }
   function counts() {
     const c = { now: 0, done: 0, unfinished: 0 };
@@ -214,17 +243,37 @@
     return Math.max(1, Math.round((Date.now() / 1000 - Math.min(...firsts)) / DAY / 30.4));
   }
   function renderLede() {
-    if (!S.data) { $("#lede").textContent = t("first_run"); $("#mini").innerHTML = ""; return; }
-    const T = S.data.totals, c = counts(), m = spanMonths();
-    const week = projects().filter((p) => p.days != null && p.days < 7).length;
-    $("#lede").innerHTML = t(m ? "lede" : "lede_nospan", { p: T.projects, m, now: c.now, done: c.done, un: c.unfinished })
-      + `<span class="lede2">${t(week ? "lede2" : "lede2_none", { w: week })}</span>`;
-    const row = (s) => `<div class="st" title="${esc(t("state_hint." + s))}"><span><i class="sw" style="background:${COLORS[s]}"></i>${esc(t("state." + s))}${s === "paused" && c.forgotten ? ` <span class="dim">${esc(t("stale_n", { n: c.forgotten }))}</span>` : ""}</span><span>${c[s] || 0}</span></div>`;
-    $("#mini").innerHTML = GROUPS.map(([g, ss]) => `<div class="grp"><span>${esc(t("group." + g))}</span><span>${c[g]}</span></div>`
-      + ss.filter((s) => STATES.includes(s) || c[s]).map(row).join("")).join("")
-      + `<div class="grp disk"><span>${esc(t("disk"))}</span><span>${bytes(T.bytes)}</span></div>`
-      + `<div class="st" title="${esc(t("regen_hint"))}"><span>${esc(t("regenerable"))}</span><span>${bytes(T.reclaim)}</span></div>`
-      + `<div class="st" title="${esc(t("byproducts_hint"))}"><span>${esc(t("byproducts"))}</span><span>${bytes(T.byproducts || 0)}</span></div>`;
+    if (!S.data) { $("#lede").textContent = t("first_run"); $("#kpis").innerHTML = ""; return; }
+    const T = S.data.totals, c = counts(), m = spanMonths(), ps = projects();
+    const week = ps.filter((p) => p.days != null && p.days < 7).length;
+    $("#lede").innerHTML = t(m ? "lede" : "lede_nospan", { p: T.projects, m, w: week });
+    const noVcs = ps.filter((p) => p.flags && p.flags.unsaved && p.flags.unsaved.no_vcs).length;
+    const unsaved = ps.filter((p) => p.flags && p.flags.unsaved).length;
+    const byp = T.byproducts || 0;
+    // each card is a shortcut: it filters the list below
+    const cards = [
+      { key: "projects", v: T.projects, sub: t("kpi.projects_sub", { now: c.now, done: c.done, un: c.unfinished }), act: "all", on: false },
+      { key: "active", v: c.active || 0, sub: t("kpi.active_sub"), act: "s:active", dot: "active", on: S.f.status === "active" },
+      { key: "blocked", v: c.blocked || 0, sub: t("kpi.blocked_sub"), act: "s:blocked", dot: "blocked", cls: (c.blocked ? "blocked" : ""), on: S.f.status === "blocked" },
+      { key: "unsaved", v: unsaved, sub: t("kpi.unsaved_sub", { a: noVcs, b: unsaved - noVcs }), act: "f:unsaved", cls: unsaved ? "warn" : "", on: S.f.unsaved && S.f.status === "all", title: t("unsaved.no_vcs") },
+      { key: "reclaim", v: bytes(T.reclaim + byp), sub: t("kpi.reclaim_sub", { r: bytes(T.reclaim), b: bytes(byp) }), act: "f:reclaim", on: S.f.reclaim && S.f.status === "all", title: t("regen_hint") + "\n" + t("byproducts_hint") },
+    ];
+    $("#kpis").innerHTML = cards.map((k) => `<button type="button" class="kpi ${k.cls || ""}" data-kpi="${k.act}" aria-pressed="${!!k.on}"${k.title ? ` title="${esc(k.title)}"` : ""}>
+        <span class="k">${k.dot ? `<span class="dot" style="background:${stc(k.dot)}"></span>` : ""}${esc(t("kpi." + k.key))}</span>
+        <span class="v">${esc(k.v)}</span><span class="s">${esc(k.sub)}</span></button>`).join("");
+  }
+  function applyKpi(act) {
+    S.f.q = ""; $("#q").value = "";
+    S.f.status = "all"; S.f.unsaved = false; S.f.reclaim = false; S.f.pinned = false;
+    if (act.startsWith("s:")) S.f.status = act.slice(2);
+    if (act === "f:unsaved") S.f.unsaved = true;
+    if (act === "f:reclaim") { S.f.reclaim = true; S.sort = "reclaim"; store("vibestrata.sort2", S.sort); $("#sort").value = S.sort; renderSortHeads(); }
+    $("#fUnsaved").checked = S.f.unsaved; $("#fReclaim").checked = S.f.reclaim; $("#fPinned").checked = false;
+    refreshList();
+    if (act !== "all") $("#tableCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function refreshList() {
+    renderLede(); renderChips(); renderRows(); if (S.data) strata(false);
   }
   // ── render: the board, where things stand ────────────────────────────
   const BOARD = 4;
@@ -246,9 +295,9 @@
   // the one line that says where it stands: your note, the words it stopped on, or the last thing you worked on
   function boardQuote(p) {
     const s = eff(p), c = p.claude || {};
-    if (noteOf(p)) return `<span class="b-q note">✎ ${esc(noteOf(p))}</span>`;
+    if (noteOf(p)) return `<span class="b-q note">${esc(t("stop.note"))} ${esc(noteOf(p))}</span>`;
     if (s === "blocked" && source(p) === "rules") { const w = (p.why || []).find(([, v]) => v && v.q); if (w) return `<span class="b-q blk">${esc(q(w[1].q))}</span>`; }
-    if (p.resume && s !== "active") return `<span class="b-q">↳ ${esc(noteBody(p.resume.text))}</span>`;
+    if (p.resume && s !== "active") return `<span class="b-q">${esc(noteBody(p.resume.text))}</span>`;
     if (c.last_prompt) return `<span class="b-q">${esc(q(lastWork(p)))}</span>`;
     return summaryOf(p) ? `<span class="b-q dim">${esc(summaryOf(p))}</span>` : "";
   }
@@ -260,19 +309,19 @@
       const items = top.map((p) => {
         const c = p.claude || {};
         const meta = [ago(p.activity.last), key === "forgot" && c.meaningful ? t("board.talks", { n: c.meaningful }) : ""].filter(Boolean).join(" · ");
-        return `<li data-id="${p.id}" tabindex="0"><span class="b-ttl">${pinned(p) ? `<span class="pinmark">◆</span>` : ""}${esc(titleOf(p))}</span>${boardQuote(p)}<span class="b-meta">${esc(meta)}</span></li>`;
+        return `<li data-id="${p.id}" tabindex="0"><span class="b-ttl"><span class="t">${pinned(p) ? `<span class="pinmark">◆</span> ` : ""}${esc(titleOf(p))}</span><span class="m">${esc(meta)}</span></span>${boardQuote(p)}</li>`;
       }).join("");
       return `<section class="lane">
-        <header title="${esc(t("board.hint_" + key))}"><i class="sw" style="background:${COLORS[st]}"></i>${esc(t("board." + key))}<span class="n">${all.length}</span><span class="how">${esc(t("board.how_" + key))}</span></header>
+        <header title="${esc(t("board.hint_" + key))}"><span class="dot" style="background:${stc(st)}"></span>${esc(t("board." + key))}<span class="n">${all.length}</span><span class="how">${esc(t("board.how_" + key))}</span></header>
         ${items ? `<ol>${items}</ol>` : `<div class="empty-lane">${esc(t("board.none_" + key))}</div>`}
-        ${all.length > BOARD ? `<button class="lane-more" data-s="${st}">${esc(t("board.more", { n: all.length }))}</button>` : ""}
+        ${all.length > BOARD ? `<button class="lane-more" type="button" data-s="${st}">${esc(t("board.more", { n: all.length }))} →</button>` : ""}
       </section>`;
     }).join("");
   }
   function showInList(status) {
     S.f.status = status;
-    renderChips(); renderRows(); strata(false);
-    $(".toolbar").scrollIntoView({ behavior: "smooth", block: "start" });
+    refreshList();
+    $("#tableCard").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function renderLegend() {
@@ -281,7 +330,7 @@
     $("#legendBtn").setAttribute("aria-pressed", String(S.legend));
     if (!S.legend) return;
     el.innerHTML = `<p class="lg-intro">${esc(t("legend_intro"))}</p>` + GROUPS.map(([g, ss]) => `<div class="lg-group"><h5>${esc(t("group." + g))}</h5>`
-      + ss.map((s) => `<div class="lg-row"><span class="stat"><span class="dot" style="background:${COLORS[s]}"></span>${esc(t("state." + s))}</span><span class="lg-what">${esc(t("state_hint." + s))}</span><span class="lg-do">${esc(t("state_do." + s))}</span></div>`).join("") + `</div>`).join("");
+      + ss.map((s) => `<div class="lg-row"><span>${badge(s)}</span><span class="lg-what">${esc(t("state_hint." + s))}</span><span class="lg-do">${esc(t("state_do." + s))}</span></div>`).join("") + `</div>`).join("");
   }
 
   // ── render: strata ───────────────────────────────────────────────────
@@ -289,8 +338,8 @@
   let strataLayout = null;
   function strata(animate) {
     const svg = $("#strata");
-    const W = svg.clientWidth || 1200, H = 360;
-    const L = 8, R = W - 64, TOP = 46, BOT = H - 10;
+    const W = svg.clientWidth || 1200, H = svg.clientHeight || 250;
+    const L = 8, R = W - 64, TOP = 40, BOT = H - 6;
     const MAXD = 730;
     const th = S.data ? S.data.thresholds : { active: 14, cooling: 45, dormant: 120 };
     const xOf = (d) => L + (R - L) * Math.log1p(Math.min(Math.max(d, 0), MAXD)) / Math.log1p(MAXD);
@@ -299,30 +348,33 @@
     const matches = new Set(filtered().map((p) => p.id));
     const filtering = S.f.q || S.f.status !== "all" || S.f.reclaim || S.f.unsaved || S.f.pinned;
 
-    const fresh = !strataLayout || strataLayout.W !== W;
+    const fresh = !strataLayout || strataLayout.W !== W || strataLayout.H !== H;
     if (fresh) {
       svg.innerHTML = "";
       strataEls.clear();
       svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
       const defs = document.createElementNS(SVGNS, "defs");
-      defs.innerHTML = `<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="rgba(241,236,226,.55)"/><line x1="0" y1="0" x2="0" y2="5" stroke="#1D1A15" stroke-width="1.6"/></pattern>`;
+      defs.innerHTML = `<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" style="fill:var(--hatch-bg)"/><line x1="0" y1="0" x2="0" y2="5" style="stroke:var(--hatch)" stroke-width="1.6"/></pattern>`;
       svg.appendChild(defs);
       const bands = [[0, th.active, "b0"], [th.active, th.cooling, "b1"], [th.cooling, th.dormant, "b2"], [th.dormant, MAXD, "b3"]];
       const bg = document.createElementNS(SVGNS, "g");
       let html = "";
       bands.forEach(([a, b, s], i) => {
         const x0 = xOf(a), x1 = i === 3 ? W : xOf(b);
-        html += `<rect x="${x0}" y="${TOP}" width="${x1 - x0}" height="${BOT - TOP}" fill="#1D1A15" opacity="${0.012 + i * 0.016}"/>`;
-        html += `<line x1="${x0}" x2="${x0}" y1="10" y2="${BOT}" stroke="#1D1A15" stroke-opacity="${i ? 0.35 : 0}" stroke-dasharray="2 3"/>`;
-        html += `<text class="band-label" x="${x0 + 8}" y="20" data-band="${s}">${esc(t("band." + s, { a: th.active, c: th.cooling, d: th.dormant }))}</text>`;
+        html += `<rect class="band" x="${x0}" y="${TOP}" width="${x1 - x0}" height="${BOT - TOP}" opacity="${0.012 + i * 0.016}"/>`;
+        if (i) html += `<line class="axis" x1="${x0}" x2="${x0}" y1="8" y2="${BOT}" stroke-dasharray="2 3"/>`;
+        if (x1 - x0 >= 72) html += `<text class="band-label" x="${x0 + 8}" y="17" data-band="${s}">${esc(t("band." + s, { a: th.active, c: th.cooling, d: th.dormant }))}</text>`;
       });
-      for (let y = TOP + 30; y < BOT; y += 30) html += `<line x1="${L}" x2="${W}" y1="${y}" y2="${y}" stroke="#1D1A15" stroke-opacity=".06"/>`;
+      for (let y = TOP + 30; y < BOT; y += 30) html += `<line class="grid" x1="${L}" x2="${W}" y1="${y}" y2="${y}"/>`;
+      let lastTick = -Infinity;  // skip labels that would collide on a narrow chart
       [[0, "today"], [7, "7d"], [30, "30d"], [90, "90d"], [180, "180d"], [365, "1y"], [730, "2y+"]].forEach(([d, lab]) => {
         const x = xOf(d);
-        html += `<line x1="${x}" x2="${x}" y1="${TOP - 6}" y2="${TOP}" stroke="#1D1A15"/>`;
-        html += `<text class="tick" data-tick="${lab}" x="${x + (d ? -3 : 2)}" y="${TOP - 10}" text-anchor="${d ? "end" : "start"}">${esc(lab === "today" ? t("today") : lab)}</text>`;
+        html += `<line class="axis" x1="${x}" x2="${x}" y1="${TOP - 5}" y2="${TOP}"/>`;
+        if (x - lastTick < 34) return;
+        lastTick = x;
+        html += `<text class="tick" data-tick="${lab}" x="${x + (d ? -3 : 2)}" y="${TOP - 9}" text-anchor="${d ? "end" : "start"}">${esc(lab === "today" ? t("today") : lab)}</text>`;
       });
-      html += `<line x1="${L}" x2="${W}" y1="${TOP}" y2="${TOP}" stroke="#1D1A15" stroke-width="1.5"/>`;
+      html += `<line class="axis" x1="${L}" x2="${W}" y1="${TOP}" y2="${TOP}" stroke-width="1.2"/>`;
       bg.innerHTML = html;
       svg.appendChild(bg);
       const g = document.createElementNS(SVGNS, "g");
@@ -349,7 +401,7 @@
     let maxSum = 1;
     cols.forEach((arr) => {
       arr.sort((a, b) => a.d - b.d);
-      maxSum = Math.max(maxSum, arr.reduce((s, o) => s + Math.sqrt(o.p.bytes), 0));
+      maxSum = Math.max(maxSum, arr.reduce((s, o) => s + Math.sqrt(Math.max(0, o.p.bytes || 0)), 0));
     });
     const k = (BOT - TOP - 8) / maxSum;
     const target = new Map();
@@ -357,8 +409,8 @@
       let y = TOP;
       const x = L + c * (BW + GAP);
       arr.forEach(({ p }) => {
-        const h = Math.max(2, Math.sqrt(p.bytes) * k);
-        const hh = p.bytes ? Math.min(h, h * (p.reclaim + p.reclaim_optional * 0) / p.bytes) : 0;
+        const h = Math.max(2, Math.sqrt(Math.max(0, p.bytes || 0)) * k);
+        const hh = p.bytes > 0 ? Math.min(h, h * (p.reclaim || 0) / p.bytes) : 0;
         target.set(p.id, { x, y, h, hh, p });
         y += h;
       });
@@ -371,13 +423,13 @@
         el = document.createElementNS(SVGNS, "g");
         el.setAttribute("class", "blk" + (animate ? " grow" : ""));
         el.dataset.id = id;
-        el.innerHTML = `<rect class="fill"/><rect class="hat" fill="url(#hatch)"/><rect class="edge" fill="none" stroke="#F1ECE2" stroke-width="1"/>`;
+        el.innerHTML = `<rect class="fill"/><rect class="hat" fill="url(#hatch)"/><rect class="edge" fill="none" stroke-width="1"/>`;
         if (animate) el.style.animationDelay = (Math.min(v.x / W, 1) * 500 + Math.random() * 120).toFixed(0) + "ms";
         layer.appendChild(el);
         strataEls.set(id, el);
         el._cur = { x: v.x, y: v.y, h: v.h, hh: v.hh };
       }
-      el.querySelector(".fill").setAttribute("fill", COLORS[eff(v.p)] || COLORS.paused);
+      el.querySelector(".fill").style.fill = stc(eff(v.p));
       el.classList.toggle("dimmed", !!filtering && !matches.has(id));
       el.style.opacity = filtering && !matches.has(id) ? 0.18 : "";
       el.classList.toggle("on", S.hover === id || S.sel === id);
@@ -390,9 +442,9 @@
     const ref = [1 << 30, 10 * (1 << 30)].filter((b) => Math.sqrt(b) * k < BOT - TOP - 20);
     sc.innerHTML = ref.map((b, i) => {
       const h = Math.sqrt(b) * k, x = W - 46 + i * 22;
-      return `<rect x="${x}" y="${TOP}" width="8" height="${h}" fill="none" stroke="#1D1A15" stroke-width="1"/><text class="tick" x="${x + 4}" y="${TOP + h + 12}" text-anchor="middle">${bytes(b).replace(".0", "")}</text>`;
+      return `<rect class="scale-box" x="${x}" y="${TOP}" width="8" height="${h}" stroke-width="1"/><text class="tick" x="${x + 4}" y="${TOP + h + 12}" text-anchor="middle">${bytes(b).replace(".0", "")}</text>`;
     }).join("");
-    strataLayout = { W, k };
+    strataLayout = { W, H, k };
   }
   function tweenBlock(el, to, bw, ms) {
     const from = el._cur;
@@ -482,18 +534,23 @@
     return list.slice().sort((a, b) => (S.sort === "state" ? 0 : (pinned(b) - pinned(a))) || by(a, b));
   }
   function pulseSvg(p) {
-    const w = 108, h = 16;
-    let s = `<svg class="pulse" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><line x1="0" x2="${w}" y1="${h - 0.5}" y2="${h - 0.5}" stroke="#1D1A15" stroke-opacity=".25"/>`;
+    const w = 108, h = 18;
+    let s = `<svg class="pulse" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><line x1="0" x2="${w}" y1="${h - 0.5}" y2="${h - 0.5}" stroke="currentColor" stroke-opacity=".35"/>`;
     for (const d of p.pulse || []) {
       const x = w - (d + 1) * 1.2;
-      s += `<rect x="${x.toFixed(1)}" y="2" width="1.2" height="${h - 3}" fill="${d < 14 ? COLORS.active : "#1D1A15"}" opacity="${d < 14 ? 1 : 0.55}"/>`;
+      s += `<rect x="${x.toFixed(1)}" y="3" width="1.2" height="${h - 4}" style="fill:${d < 14 ? stc("active") : "currentColor"}" opacity="${d < 14 ? 1 : 0.6}"/>`;
     }
     return s + "</svg>";
   }
+  // when it was last worked on, and which trail says so (a commit, an AI conversation, file changes)
   function triad(p) {
-    const a = p.activity, win = a.source;
-    const part = (k, sym) => a[k] ? `<span class="${k === win ? "win" : ""}" title="${esc(t("src." + k))}">${sym} ${esc(ago(a[k]))}</span>` : "";
-    return `<div class="triad"><span class="big">${esc(ago(a.last))}</span>${[part("commit", "⎇"), part("claude", "✳"), part("files", "▤")].filter(Boolean).join(" · ")}</div>`;
+    const a = p.activity;
+    const src = a.source ? t("via", { s: t("src." + a.source) }) : "";
+    const parts = [["commit", t("src.commit")], ["claude", t("src.claude")], ["files", t("src.files")]].filter(([k]) => a[k]).map(([k, l]) => `${l} ${ago(a[k])}`).join(" · ");
+    return `<div class="when" title="${esc(parts)}"><span class="big">${esc(ago(a.last))}</span>${src ? `<span class="src">${esc(src)}</span>` : ""}</div>`;
+  }
+  function badge(s, extra, big) {
+    return `<span class="badge${big ? " big" : ""}" style="--c:${stc(s)}"><span class="dot"></span>${esc(t("state." + s))}${extra || ""}</span>`;
   }
   function chipsHtml(p) {
     const out = [], f = p.flags || {};
@@ -503,7 +560,7 @@
     if ((p.links || {}).site) out.push(`<span class="chip live" title="${esc(p.links.site)}">${esc(t("chips.live"))}</span>`);
     if (p.byproducts && p.byproducts.bytes >= 1048576) out.push(`<span class="chip byp" title="${esc(t("byproducts_hint"))}">${esc(t("chips.byproducts", { size: bytes(p.byproducts.bytes) }))}</span>`);
     p.chips.filter((c) => c === "cloud").forEach((c) => out.push(`<span class="chip ${c}">${esc(t("chips." + c))}</span>`));
-    if (p.lineage) out.push(`<span class="chip lineage" title="${esc(t("chips.lineage"))}: ${esc(p.lineage)} ×${p.lineage_size}">${p.lineage_latest ? "★ " + esc(t("chips.latest")) : "⟲ " + esc(p.lineage)}</span>`);
+    if (p.lineage) out.push(`<span class="chip lineage" title="${esc(t("chips.lineage"))}: ${esc(p.lineage)} ×${p.lineage_size}">${p.lineage_latest ? esc(t("chips.latest")) : esc(t("chips.lineage")) + " · " + esc(p.lineage)}</span>`);
     return `<span class="chips">${out.join("")}</span>`;
   }
   function unsavedText(u) {
@@ -514,40 +571,49 @@
   // the second line: where it stopped, when that matters
   function stopLine(p) {
     const s = eff(p), c = p.claude || {};
-    if (noteOf(p)) return `<span class="note-q">✎ ${esc(noteOf(p))}</span>`;
-    if (s === "blocked" && source(p) === "rules") { const w = (p.why || []).find(([, v]) => v && v.q); if (w) return `<span class="blk-q">✕ ${esc(q(w[1].q))}</span>`; }
-    if (p.resume && (s === "paused" || s === "blocked")) return `<span class="note-q">↳ ${esc(p.resume.text)}</span>`;
-    if (s === "paused" && c.last_prompt) return `<span class="last-q">↳ ${esc(q(c.last_prompt))}</span>`;
-    if (s === "active" && c.last_prompt) return `<span class="now-q">● ${esc(t("now_doing"))} ${esc(q(c.last_prompt))}</span>`;
+    const lbl = (k) => `<span class="lbl">${esc(t("stop." + k))}</span>`;
+    if (noteOf(p)) return `<span class="note-q">${lbl("note")}${esc(noteOf(p))}</span>`;
+    if (s === "blocked" && source(p) === "rules") { const w = (p.why || []).find(([, v]) => v && v.q); if (w) return `<span class="blk-q">${lbl("blocked")}${esc(q(w[1].q))}</span>`; }
+    if (p.resume && (s === "paused" || s === "blocked")) return `<span class="note-q">${lbl("resume")}${esc(p.resume.text)}</span>`;
+    if (s === "paused" && c.last_prompt) return `<span class="last-q">${lbl("last")}${esc(q(c.last_prompt))}</span>`;
+    if (s === "active" && c.last_prompt) return `<span class="now-q"><span class="lbl">${esc(t("now_doing"))}</span>${esc(q(c.last_prompt))}</span>`;
     return "";
   }
-  function rowHtml(p, i) {
-    const s = eff(p), title = titleOf(p), stop = stopLine(p), sum = summaryOf(p);
-    return `<tr data-id="${p.id}" class="${S.sel === p.id ? "sel" : ""} ${S.checked.has(p.id) ? "picked" : ""}" style="animation-delay:${Math.min(i, 30) * 12}ms">
+  function stateBadge(p) {
+    const s = eff(p), src = source(p);
+    const extra = (s === "paused" && p.days != null ? ` <span class="src">${esc(t("days_n", { n: Math.round(p.days) }))}</span>` : "")
+      + (src !== "rules" ? ` <span class="src" title="${esc(t("src_" + src))}">${src === "you" ? "✎" : "✳"}</span>` : "");
+    return badge(s, extra);
+  }
+  function rowHtml(p) {
+    const title = titleOf(p), stop = stopLine(p), sum = summaryOf(p);
+    return `<tr data-id="${p.id}" class="${S.sel === p.id ? "sel" : ""} ${S.checked.has(p.id) ? "picked" : ""}">
         <td class="pick"><input type="checkbox" data-pick="${p.id}" ${S.checked.has(p.id) ? "checked" : ""} aria-label="${esc(title)}"></td>
-        <td><div class="pname">${pinned(p) ? `<span class="pinmark">◆</span>` : ""}<span class="ttl">${esc(title)}</span>${title !== p.name ? `<span class="folder">${esc(p.name)}</span>` : ""} ${chipsHtml(p)}</div>
+        <td><div class="pname">${pinned(p) ? `<span class="pinmark" title="${esc(t("pin"))}">◆</span>` : ""}<span class="ttl">${esc(title)}</span>${title !== p.name ? `<span class="folder">${esc(p.name)}</span>` : ""}${chipsHtml(p)}</div>
           <div class="pdesc"><span class="kind">${esc(kindLabel(p))}</span>${sum ? " · " + esc(sum) : ""}</div>
-          ${stop ? `<div class="pstop">${stop}</div>` : ""}</td>
-        <td>${triad(p)}</td>
+          ${stop ? `<div class="pstop">${stop}</div>` : ""}
+          <div class="pmeta-narrow">${esc(ago(p.activity.last))} · ${bytes(p.bytes)}</div></td>
+        <td class="c-status">${stateBadge(p)}</td>
+        <td class="c-last">${triad(p)}</td>
+        <td class="num c-size"><div class="sizebar"><span class="v">${bytes(p.bytes)}</span><span class="bar" title="${esc(t("regen_share", { r: bytes(p.reclaim) }))}"><i style="width:${p.bytes ? (100 * p.reclaim / p.bytes).toFixed(1) : 0}%"></i></span></div></td>
         <td class="c-pulse">${pulseSvg(p)}</td>
-        <td class="num"><div class="sizebar"><span class="v">${bytes(p.bytes)}</span><span class="bar hatch" title="${esc(t("regen_share", { r: bytes(p.reclaim) }))}"><i style="width:${p.bytes ? (100 * p.reclaim / p.bytes).toFixed(1) : 0}%"></i></span></div></td>
-        <td class="c-status"><span class="stat ${source(p)}"><span class="dot" style="background:${COLORS[s]}"></span>${esc(stateLabel(p))}${source(p) !== "rules" ? `<sup title="${esc(t("src_" + source(p)))}">${source(p) === "you" ? "✎" : "✳"}</sup>` : ""}</span></td>
       </tr>`;
   }
   function renderRows() {
     const list = sorted(filtered());
-    let html = "", i = 0;
+    let html = "";
     if (S.sort === "state") {
       for (const [g] of GROUPS) {
         const rows = list.filter((p) => groupOf(eff(p)) === g);
         if (!rows.length) continue;
         html += `<tr class="grp-row"><td colspan="6"><span>${esc(t("group." + g))}</span><span class="n">${rows.length}</span><span class="gh">${esc(t("group_hint." + g))}</span></td></tr>`;
-        html += rows.map((p) => rowHtml(p, i++)).join("");
+        html += rows.map((p) => rowHtml(p)).join("");
       }
     } else {
-      html = list.map((p) => rowHtml(p, i++)).join("");
+      html = list.map((p) => rowHtml(p)).join("");
     }
     $("#rows").innerHTML = html;
+    $("#count").textContent = S.data ? t("count_n", { n: list.length }) : "";
     const all = $("#pickAll");
     if (all) { all.checked = list.length > 0 && list.every((p) => S.checked.has(p.id)); all.indeterminate = !all.checked && list.some((p) => S.checked.has(p.id)); }
     const empty = $("#empty");
@@ -558,7 +624,7 @@
   function renderChips() {
     const c = counts();
     const keys = ["all", ...STATES, ...(c.closed ? ["closed"] : [])];
-    $("#statusChips").innerHTML = keys.map((k) => `<button data-s="${k}" aria-pressed="${S.f.status === k}" title="${k === "all" ? "" : esc(t("state_hint." + k))}">${k === "all" ? esc(t("all")) : `<span class="dot" style="width:8px;height:8px;border-radius:50%;background:${COLORS[k]}"></span>${esc(t("state." + k))}`}<span class="n">${k === "all" ? projects().length : c[k] || 0}</span></button>`).join("");
+    $("#statusChips").innerHTML = keys.map((k) => `<button type="button" data-s="${k}" aria-pressed="${S.f.status === k}" title="${k === "all" ? "" : esc(t("state_hint." + k))}">${k === "all" ? esc(t("all")) : `<span class="dot" style="background:${stc(k)}"></span>${esc(t("state." + k))}`}<span class="n">${k === "all" ? projects().length : c[k] || 0}</span></button>`).join("");
   }
 
   // ── selection: pick projects, then act on all of them ────────────────
@@ -786,13 +852,13 @@
 
     const bi = (p.byproducts || {}).items || [];
     const bypHint = !bi.length ? "" : plan.byproducts ? t("byp_pre") : f.unsaved ? t("byp_gate", { why: unsavedText(f.unsaved) }) : t("byp_state", { s: t("state." + s) });
-    const byp = bi.length ? `<div class="dim" style="font-size:12px;margin-bottom:6px">${esc(bypHint)}</div><ul class="items">${bi.map((b) => `
+    const byp = bi.length ? `<p class="sec-hint">${esc(bypHint)}</p><ul class="items">${bi.map((b) => `
       <li class="${b.blocked ? "blocked" : ""}"><input type="checkbox" data-path="${esc(b.path)}" data-kind="${esc(b.kind)}" data-bytes="${b.bytes}" ${S.picks.has(b.path) ? "checked" : ""} ${b.blocked ? "disabled" : ""}>
         <div><div class="rel">${esc(b.rel)}${b.kind === "workspace" ? "/" : ""}<span class="tier byp">${esc(t("byp_kind." + b.why))}</span></div>
         <div class="why">${b.blocked ? esc(reasonText(b.blocked)) : b.why === "older-version" ? esc(t("byp_keep", { f: b.keep })) : esc(t("byp_ws", { n: b.files }))}${b.holds ? ` · <b class="warn">${esc(t("byp_holds", { n: b.holds, f: (b.held || []).join(", ") }))}</b>` : ""}${b.code ? ` · <b class="warn">${esc(t("byp_code", { n: b.code }))}</b>` : ""}${b.referenced ? ` · <b class="warn">${esc(t("byp_ref"))}</b>` : ""}</div></div>
-        <span class="sz">${bytes(b.bytes)}</span></li>`).join("")}</ul>${bi.some((b) => !b.blocked && !S.picks.has(b.path)) ? `<button class="btn sm" data-act="pickbyp" style="margin-top:8px">${esc(t("byp_select"))}</button>` : ""}` : `<div class="dim">${esc(t("byp_none"))}</div>`;
+        <span class="sz">${bytes(b.bytes)}</span></li>`).join("")}</ul>${bi.some((b) => !b.blocked && !S.picks.has(b.path)) ? `<button class="btn sm" type="button" data-act="pickbyp" style="margin-top:8px">${esc(t("byp_select"))}</button>` : ""}` : `<div class="dim">${esc(t("byp_none"))}</div>`;
 
-    const big = p.big.length ? `<div class="dim" style="font-size:12px;margin-bottom:6px">${esc(t("heavy_hint"))}</div><ul class="items">${p.big.map((b) => `
+    const big = p.big.length ? `<p class="sec-hint">${esc(t("heavy_hint"))}</p><ul class="items">${p.big.map((b) => `
       <li><input type="checkbox" data-path="${esc(b.path)}" data-kind="file" data-bytes="${b.bytes}" ${S.picks.has(b.path) ? "checked" : ""}>
         <div><div class="rel">${esc(b.rel)}</div><div class="why">${esc(b.kind)} · ${esc(ago(b.mtime))}${b.sprawl ? ` · <b>${esc(t("sprawl"))}</b>` : ""}</div></div>
         <span class="sz">${bytes(b.bytes)}</span></li>`).join("")}</ul>` : `<div class="dim">—</div>`;
@@ -807,25 +873,25 @@
           <div class="row"><button class="btn sm solid" data-act="save-name">${esc(t("save"))}</button>
             ${nm.title || nm.summary ? `<button class="btn sm" data-act="reset-name">${esc(t("auto_name"))}</button>` : ""}
             <button class="btn sm ghost" data-act="cancel-name">${esc(t("cancel"))}</button></div></div>`
-      : `<div><h3>${esc(title)} <button class="btn ghost sm edit-btn" data-act="edit-name" title="${esc(t("rename"))}">✎</button></h3>
+      : `<div><h3>${esc(title)} <button class="btn ghost sm edit-btn" type="button" data-act="edit-name" title="${esc(t("rename"))}" aria-label="${esc(t("rename"))}">✎</button></h3>
           ${sum ? `<p class="summary">${esc(sum)}</p>` : ""}
           <div class="path">${esc(p.path)} · ${esc(kindLabel(p))}</div></div>`;
 
     $("#drawer").innerHTML = `
       <header>
-        <div class="top">${head}<button class="btn ghost x" data-act="close" aria-label="close">✕</button></div>
-        <div class="stateline"><span class="stat big"><span class="dot" style="background:${COLORS[s]}"></span>${esc(stateLabel(p))}</span>
+        <div class="top">${head}<button class="btn ghost sm x" type="button" data-act="close" aria-label="close">✕</button></div>
+        <div class="stateline">${badge(s, s === "paused" && p.days != null ? ` <span class="src">${esc(t("days_n", { n: Math.round(p.days) }))}</span>` : "", true)}
           <span class="whytext">${esc(whyText(p))}</span></div>
         <div class="row">
-          <button class="btn sm solid" data-open="${pr.how}">✳ ${esc(pr.label)}</button>
-          <button class="btn sm" data-open="finder">${esc(t("open_finder"))}</button>
-          <button class="btn sm" data-open="terminal">${esc(t("open_terminal"))}</button>
-          ${dl.count ? `<button class="btn sm" data-file="${esc((dl.recent || [""])[0])}">${esc(t("open_output"))}</button>` : ""}
+          <button class="btn sm solid" type="button" data-open="${pr.how}">${esc(pr.label)}</button>
+          <button class="btn sm" type="button" data-open="finder">${esc(t("open_finder"))}</button>
+          <button class="btn sm" type="button" data-open="terminal">${esc(t("open_terminal"))}</button>
+          ${dl.count ? `<button class="btn sm" type="button" data-file="${esc((dl.recent || [""])[0])}">${esc(t("open_output"))}</button>` : ""}
           ${L.repo ? `<a class="btn sm" href="${esc(L.repo)}" target="_blank" rel="noopener">GitHub ↗</a>` : ""}
           ${L.site ? `<a class="btn sm" href="${esc(L.site)}" target="_blank" rel="noopener">${esc(t("open_site"))} ↗</a>` : ""}
           <span style="flex:1"></span>
-          <button class="btn sm ghost" data-act="pin">${pinned(p) ? "◆ " + esc(t("unpin")) : "◇ " + esc(t("pin"))}</button>
-          <select class="mini" data-act="override" title="${esc(t("override"))}">
+          <button class="btn sm ghost" type="button" data-act="pin">${pinned(p) ? "◆ " + esc(t("unpin")) : "◇ " + esc(t("pin"))}</button>
+          <select class="mini" data-act="override" title="${esc(t("override"))}" aria-label="${esc(t("override"))}">
             <option value="">${esc(t("override"))}: ${esc(t("auto"))} (${esc(t("state." + (lab.state ? (LEGACY[lab.state] || lab.state) : p.state || "paused")))})</option>
             ${USER_STATES.map((x) => `<option value="${x}" ${over === x ? "selected" : ""}>${esc(t("state." + x))}</option>`).join("")}
           </select>
@@ -842,18 +908,18 @@
         <h4><span>${esc(t("git"))}</span></h4>
         ${gitHtml}
         <h4><span>${esc(t("composition"))}</span><span>${bytes(p.bytes)} · ${esc(t("files_n", { n: p.files.toLocaleString() }))}</span></h4>
-        <div class="comp">${comp.map(([k, v]) => `<i title="${esc(t("comp." + k))} ${bytes(v)}" style="width:${(100 * v / compTotal).toFixed(2)}%;background:${COMP_COLORS[k] || "#999"}"></i>`).join("")}</div>
-        <div class="comp-legend">${comp.map(([k, v]) => `<span><i class="sw" style="background:${COMP_COLORS[k] || "#999"}"></i>${esc(t("comp." + k))} ${bytes(v)}</span>`).join("")}</div>
+        <div class="comp">${comp.map(([k, v]) => `<i title="${esc(t("comp." + k))} ${bytes(v)}" style="width:${(100 * v / compTotal).toFixed(2)}%;background:${compc(k)}"></i>`).join("")}</div>
+        <div class="comp-legend">${comp.map(([k, v]) => `<span><i class="sw" style="background:${compc(k)}"></i>${esc(t("comp." + k))} ${bytes(v)}</span>`).join("")}</div>
         <h4><span>${esc(t("regenerable"))}</span><span>${bytes(p.reclaim)} + ${bytes(p.reclaim_optional)}</span></h4>
         ${cand}
         <h4><span>${esc(t("byproducts"))}</span><span>${bytes((p.byproducts || {}).bytes || 0)}</span></h4>
         ${byp}
         <h4><span>${esc(t("heavy_files"))}</span><span>${p.big_count} · ${bytes(p.big_total)}</span></h4>
         ${big}
-        <div class="danger-zone"><button class="btn danger" data-act="trash-project">${esc(t("trash_project", { size: bytes(p.bytes) }))}</button>
+        <div class="danger-zone"><button class="btn danger" type="button" data-act="trash-project">${esc(t("trash_project", { size: bytes(p.bytes) }))}</button>
           <span class="dim">${esc(t("trash_project_hint"))}</span></div>
       </div>
-      <div class="actionbar"><span class="sum" id="pickSum"></span><button class="btn solid" data-act="move" id="moveBtn"></button></div>`;
+      <div class="actionbar"><span class="sum" id="pickSum"></span><button class="btn solid" type="button" data-act="move" id="moveBtn"></button></div>`;
     updatePickSum();
   }
   function updatePickSum() {
@@ -978,12 +1044,12 @@
       cols.get(c).push({ p, d });
     });
     let maxSum = 1;
-    cols.forEach((arr) => { arr.sort((a, b) => a.d - b.d); maxSum = Math.max(maxSum, arr.reduce((s, o) => s + Math.sqrt(o.p.bytes), 0)); });
+    cols.forEach((arr) => { arr.sort((a, b) => a.d - b.d); maxSum = Math.max(maxSum, arr.reduce((s, o) => s + Math.sqrt(Math.max(0, o.p.bytes || 0)), 0)); });
     const k = (BOT - TOP - 6) / maxSum, labels = [];
     cols.forEach((arr, c) => {
       let y = TOP + 2; const x = L + c * (BW + GAP);
       arr.forEach(({ p }) => {
-        const h = Math.max(2, Math.sqrt(p.bytes) * k), hh = p.bytes ? h * p.reclaim / p.bytes : 0;
+        const h = Math.max(2, Math.sqrt(Math.max(0, p.bytes || 0)) * k), hh = p.bytes > 0 ? h * (p.reclaim || 0) / p.bytes : 0;
         ctx.fillStyle = COLORS[eff(p)] || COLORS.paused; ctx.fillRect(x, y, BW, h);
         if (hh > 0.5) { ctx.fillStyle = pat; ctx.fillRect(x, y, BW, hh); }
         ctx.fillStyle = "#F1ECE2"; ctx.fillRect(x, y + h - 1, BW, 1);
@@ -1025,7 +1091,7 @@
     if (!S.data) return;
     $("#modalCard").innerHTML = `
       <header><h3>${esc(t("share_title"))}</h3><p>${esc(t("share_body"))}</p></header>
-      <div style="padding:14px 24px 0"><canvas id="card" style="width:100%;border:1px solid var(--rule-strong)"></canvas></div>
+      <div style="padding:14px 22px 0"><canvas id="card" style="width:100%;border:1px solid var(--line);border-radius:6px"></canvas></div>
       <footer><label class="toggle" style="margin-right:auto"><input type="checkbox" id="cardNames"><span>${esc(t("share_names"))}</span></label>
         <button class="btn" data-m="copy">${esc(t("share_copy"))}</button>
         <button class="btn solid" data-m="dl">${esc(t("share_download"))}</button></footer>`;
@@ -1056,7 +1122,7 @@
   // ── field log ────────────────────────────────────────────────────────
   function renderLog() {
     const el = $("#log");
-    if (!S.ops.length) { el.innerHTML = `<div class="empty" style="padding:26px 0;font-size:15px">${esc(t("log_empty"))}</div>`; return; }
+    if (!S.ops.length) { el.innerHTML = `<div class="empty">${esc(t("log_empty"))}</div>`; return; }
     el.innerHTML = S.ops.slice(0, 40).map((op) => {
       const items = op.items || [];
       const size = items.reduce((s, i) => s + (i.bytes || 0), 0);
@@ -1065,9 +1131,9 @@
       const inTrash = op.to === "trash";
       const st = inTrash ? (t("op_state_trash." + op.state) !== "op_state_trash." + op.state ? t("op_state_trash." + op.state) : t("op_state." + op.state)) : t("op_state." + op.state);
       return `<div class="op"><span class="when">${esc(new Date(op.ts * 1000).toLocaleString(S.lang === "ko" ? "ko-KR" : "en-US", { dateStyle: "short", timeStyle: "short" }))}</span>
-        <span class="what">${items.length} · <b>${bytes(size)}</b> <span class="mono">${esc(names.slice(0, 4).join(", "))}${names.length > 4 ? " +" + (names.length - 4) : ""}</span> ${op.label ? `<span class="dim">— ${esc(op.label)}</span>` : ""}</span>
+        <span class="what"><b>${bytes(size)}</b> · ${items.length} · <span class="names">${esc(names.slice(0, 4).join(", "))}${names.length > 4 ? " +" + (names.length - 4) : ""}</span> ${op.label ? `<span class="dim">· ${esc(op.label)}</span>` : ""}</span>
         <span class="st ${esc(op.state)}">${esc(st)}</span>
-        <span>${canUndo ? `<button class="btn sm" data-undo="${esc(op.id)}">${esc(t("undo"))}</button>${inTrash ? "" : ` <button class="btn sm ghost" data-trash="${esc(op.id)}">${esc(t("to_trash"))}</button>`}` : ""}</span></div>`;
+        <span class="acts">${canUndo ? `<button class="btn sm" type="button" data-undo="${esc(op.id)}">${esc(t("undo"))}</button>${inTrash ? "" : ` <button class="btn sm ghost" type="button" data-trash="${esc(op.id)}">${esc(t("to_trash"))}</button>`}` : ""}</span></div>`;
     }).join("");
   }
   function bindLog() {
@@ -1114,17 +1180,32 @@
   }
 
   function bind() {
-    $("#q").addEventListener("input", (e) => { S.f.q = e.target.value; renderRows(); strata(false); });
+    $("#q").addEventListener("input", (e) => { S.f.q = e.target.value; renderRows(); renderLede(); if (S.data) strata(false); });
     $("#statusChips").addEventListener("click", (e) => {
       const b = e.target.closest("button");
       if (!b) return;
       S.f.status = b.dataset.s;
-      renderChips(); renderRows(); strata(false);
+      refreshList();
     });
     [["fReclaim", "reclaim"], ["fUnsaved", "unsaved"], ["fPinned", "pinned"]].forEach(([id, k]) => {
-      $("#" + id).addEventListener("change", (e) => { S.f[k] = e.target.checked; renderRows(); strata(false); });
+      $("#" + id).addEventListener("change", (e) => { S.f[k] = e.target.checked; refreshList(); });
     });
-    $("#sort").addEventListener("change", (e) => { S.sort = e.target.value; localStorage.setItem("vibestrata.sort2", S.sort); renderRows(); });
+    const setSort = (v) => { S.sort = v; store("vibestrata.sort2", S.sort); $("#sort").value = S.sort; renderSortHeads(); renderRows(); };
+    $("#sort").addEventListener("change", (e) => setSort(e.target.value));
+    document.querySelector(".ledger thead").addEventListener("click", (e) => {
+      const b = e.target.closest(".sortbtn");
+      if (b) setSort(b.dataset.sort);
+    });
+    $("#kpis").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-kpi]");
+      if (b) applyKpi(b.dataset.kpi);
+    });
+    $("#theme").addEventListener("click", () => {
+      S.theme = THEMES[(THEMES.indexOf(S.theme) + 1) % THEMES.length];
+      store("vibestrata.theme", S.theme === "auto" ? null : S.theme);
+      applyTheme();
+      renderTheme();
+    });
     $("#rows").addEventListener("click", (e) => {
       if (e.target.closest("td.pick")) return;
       const tr = e.target.closest("tr[data-id]");
@@ -1192,7 +1273,7 @@
     });
     $("#lang").addEventListener("click", () => {
       S.lang = S.lang === "ko" ? "en" : "ko";
-      localStorage.setItem("vibestrata.lang", S.lang);
+      store("vibestrata.lang", S.lang);
       render();
       if (S.sel) renderDrawer();
     });
@@ -1200,12 +1281,13 @@
     $("#share").addEventListener("click", openShare);
     $("#quit").addEventListener("click", async () => {
       try { await api("/api/quit", {}); } catch (e) { /* server already gone */ }
-      document.body.innerHTML = `<div class="sheet"><p class="empty">${esc(t("bye"))}</p></div>`;
+      document.body.innerHTML = `<p class="bye">${esc(t("bye"))}</p>`;
       setTimeout(() => window.close(), 400);
     });
     $("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") closeModal(); });
     let rt;
     window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { strataLayout = null; if (S.data) strata(false); }, 150); });
+    applyTheme();
     bindStrata();
     bindDrawer();
     bindLog();

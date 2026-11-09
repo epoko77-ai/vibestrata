@@ -1022,5 +1022,53 @@ class TestLeftovers(unittest.TestCase):
         self.assertEqual([i["path"] for i in cli.sweep_items(res, st, None, True) if i["group"] == "byproduct"], ["/p1/_workspace"])
 
 
+class TestDashboard(unittest.TestCase):
+    STATIC = Path(__file__).resolve().parent.parent / "vibestrata" / "static"
+
+    @unittest.skipUnless(shutil.which("node"), "node not installed")
+    def test_strings_match_across_languages(self):
+        # every key exists in both languages, with the same {placeholders}
+        script = r"""
+          global.window = {}; require(process.argv[1]);
+          const S = window.STRINGS, out = [];
+          const keys = (o, p = "") => Object.entries(o).flatMap(([k, v]) => typeof v === "object" ? keys(v, p + k + ".") : [p + k]);
+          const get = (o, k) => k.split(".").reduce((a, b) => a && a[b], o);
+          const ph = (s) => (String(s).match(/\{\w+\}/g) || []).sort().join(",");
+          const en = keys(S.en), ko = keys(S.ko);
+          en.filter((k) => !ko.includes(k)).forEach((k) => out.push("missing in ko: " + k));
+          ko.filter((k) => !en.includes(k)).forEach((k) => out.push("missing in en: " + k));
+          en.filter((k) => ko.includes(k) && ph(get(S.en, k)) !== ph(get(S.ko, k))).forEach((k) => out.push("placeholders differ: " + k));
+          console.log(JSON.stringify(out));
+        """
+        r = subprocess.run(["node", "-e", script, str(self.STATIC / "strings.js")], capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(r.stdout), [])
+
+    def test_page_loads_only_local_scripts(self):
+        # the server's CSP allows script-src 'self' only: no inline <script> blocks
+        html = (self.STATIC / "index.html").read_text(encoding="utf-8")
+        import re
+        tags = re.findall(r"<script\b[^>]*>", html)
+        self.assertTrue(tags)
+        for tag in tags:
+            self.assertRegex(tag, r'src="/static/[\w.-]+\.js"')
+            self.assertTrue((self.STATIC / re.search(r'/static/([\w.-]+)', tag).group(1)).is_file())
+
+    def test_demo_removal_never_goes_negative(self):
+        from vibestrata import demo
+        res = demo.build()
+        acts = demo.DemoActions(res)
+        before = {p["path"]: p["bytes"] for p in res["projects"]}
+        # deps, leftovers and large files from every project, like ticking them all in the drawer
+        items = [{"project": p["path"], "path": c["path"], "kind": "candidate"} for p in res["projects"] for c in p["candidates"] if c["tier"] == 1]
+        items += [{"project": p["path"], "path": b["path"], "kind": b.get("kind", "file")}
+                  for p in res["projects"] for b in [*p["byproducts"]["items"], *p["big"]] if not b.get("blocked")]
+        self.assertTrue(items)
+        op = acts.quarantine(items, "test")
+        self.assertEqual([p["name"] for p in res["projects"] if p["bytes"] < 0], [])
+        acts.restore(op["id"])
+        self.assertEqual({p["path"]: p["bytes"] for p in res["projects"]}, before)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
