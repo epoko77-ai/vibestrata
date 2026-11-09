@@ -311,9 +311,10 @@ class DemoActions:
                 skipped.append({"path": it["path"], "reason": hit["reason"] if hit else "missing"})
                 continue
             pools[where].remove(hit)
-            if kind != "candidate":
-                p["source_bytes"] -= hit["bytes"]
-            self.stash[hit["path"]] = copy.deepcopy({"item": hit, "kind": kind, "pool": where})
+            # synthetic sizes don't always add up; never let a project go below zero
+            took = min(p["source_bytes"], hit["bytes"]) if kind != "candidate" else 0
+            p["source_bytes"] -= took
+            self.stash[hit["path"]] = copy.deepcopy({"item": hit, "kind": kind, "pool": where, "took": took})
             moved.append({"src": hit["path"], "dst": f"/Users/you/.Trash/{p['name']} — {hit['path'].split('/')[-1]}",
                           "project": p["path"], "kind": kind, "bytes": hit["bytes"], "state": "moved", "in": "trash"})
             self._recompute(p)
@@ -339,7 +340,7 @@ class DemoActions:
             pool.append(saved["item"])
             pool.sort(key=lambda b: -b["bytes"])
             if saved["kind"] != "candidate":
-                p["source_bytes"] += saved["item"]["bytes"]
+                p["source_bytes"] += saved.get("took", saved["item"]["bytes"])
             i["state"] = "restored"
             self._recompute(p)
         op["state"] = "restored"
