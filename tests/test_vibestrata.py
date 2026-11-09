@@ -896,6 +896,96 @@ class TestRules(unittest.TestCase):
         self.assertEqual(redact("see verifiable-graphrag-manuscript-ko-v1.pdf"), "see verifiable-graphrag-manuscript-ko-v1.pdf")
 
 
+class TestSessionWork(unittest.TestCase):
+    """A session opened in one folder that worked in another belongs to the other."""
+
+    def setUp(self) -> None:
+        from unittest import mock
+        self.tmp = Path(tempfile.mkdtemp(prefix="vibestrata-work-")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        env = mock.patch.dict(os.environ, {"VIBESTRATA_CLAUDE_DIR": str(self.tmp / "claude"), "VIBESTRATA_HOME": str(self.tmp / "state"),
+                                           "VIBESTRATA_CODEX_DIR": str(self.tmp / "no-codex")})
+        env.start()
+        self.addCleanup(env.stop)
+        self.launch, self.target = str(self.tmp / "home/launcher"), str(self.tmp / "home/studio")
+        now = time.time()
+        rows = []
+
+        def session(sid: str, edits_in: list, cds: int = 0, prompts: tuple = ()) -> None:
+            lines = [{"type": "user", "cwd": self.launch, "sessionId": sid}]
+            for i, d in enumerate(edits_in):
+                lines.append({"type": "assistant", "cwd": self.launch, "message": {"content": [
+                    {"type": "tool_use", "id": f"t{i}", "name": ["Edit", "Write"][i % 2],
+                     "input": ({"replace_all": False} if i % 2 == 0 else {}) | {"file_path": f"{d}/f{i}.py", "content": "x" * 50}}]}})
+            for i in range(cds):
+                lines.append({"type": "assistant", "message": {"content": [
+                    {"type": "tool_use", "id": f"c{i}", "name": "Bash", "input": {"command": f"cd {self.target}/videos && make", "description": "render"}}]}})
+            write(self.tmp / "claude/projects/-enc-launcher" / f"{sid}.jsonl",
+                  "\n".join(json.dumps(x, separators=(",", ":")) for x in lines) + "\n")
+            for k, text in enumerate(prompts):
+                rows.append({"display": text, "timestamp": int((now - 3600 + k) * 1000), "project": self.launch, "sessionId": sid})
+
+        # worked in the studio: 6 writes there, 1 at home base, plus cd's
+        session("moved", [self.target + "/tools"] * 6 + [self.launch], cds=3, prompts=("render episode 7 and upload it",))
+        # glanced at the studio: 2 writes there, 10 at home base
+        session("stayed", [self.target] * 2 + [self.launch + "/src"] * 10, prompts=("fix the launcher config file",))
+        write(self.tmp / "claude/history.jsonl", "\n".join(json.dumps(r) for r in rows) + "\n")
+
+    def place(self):
+        from vibestrata import claude, scan
+        idx = claude.read_all()
+        self.assertEqual(set(idx.movers), {"moved"})                   # 2 writes elsewhere is a glance
+        self.assertIn(self.launch, idx.hints())
+        out = claude.relocate(idx, [self.launch, self.target])
+        return (scan._claude_for(self.launch, out, [self.launch, self.target]),
+                scan._claude_for(self.target, out, [self.launch, self.target]))
+
+    def test_credited_where_the_work_happened(self) -> None:
+        here, there = self.place()
+        self.assertEqual(there.last_prompt[1], "render episode 7 and upload it")
+        self.assertEqual(there.sessions, {"moved"})
+        self.assertEqual(there.last_session[2], self.launch)            # resume still opens where it started
+        self.assertEqual(there.links(), {"from": [[self.launch, 1]]})
+        self.assertEqual(here.last_prompt[1], "fix the launcher config file")
+        self.assertEqual(here.sessions, {"stayed"})
+        self.assertEqual(here.links(), {"to": [[self.target, 1]]})
+
+    def test_chunk_boundaries(self) -> None:
+        from unittest import mock
+
+        from vibestrata import claude
+        f = self.tmp / "claude/projects/-enc-launcher/moved.jsonl"
+        with open(f, "rb") as fh:
+            whole = claude._work(fh, fh.read(16384))
+        with mock.patch.object(claude, "CHUNK", 37), mock.patch.object(claude, "OVERLAP", 400), open(f, "rb") as fh:
+            tiny = claude._work(fh, fh.read(64))
+        self.assertEqual(whole, tiny)
+        self.assertEqual(whole, {self.target + "/tools": 6, self.launch: 1, self.target + "/videos": 3})
+
+    def test_shown_both_ways(self) -> None:
+        from vibestrata import brief
+        here, there = self.place()
+        self.assertEqual(brief.link_lines({"ai_links": there.links()}),
+                         ["Worked on from launcher (sessions opened there: 1)."])
+        self.assertEqual(brief.link_lines({"ai_links": here.links()}, "ko"),
+                         ["여기서 연 세션은 실제로 studio 폴더에서 작업했어요 (세션 1개)."])
+        # a folder whose every session moved away keeps the link, not an empty AI history
+        from vibestrata.claude import Activity
+        only = Activity()
+        only.work_in[self.target] = 1
+        self.assertTrue(only.empty())
+        self.assertFalse(here.empty())
+        from concurrent.futures import ThreadPoolExecutor
+
+        from vibestrata import scan
+        from vibestrata.config import load_config
+        write(Path(self.launch) / "README.md", "# Launcher")
+        with ThreadPoolExecutor(2) as pool:
+            got = scan.survey(self.launch, str(self.tmp / "home"), None, load_config(), only, pool)
+        self.assertIsNone(got["claude"])
+        self.assertEqual(got["ai_links"], {"to": [[self.target, 1]]})
+
+
 class TestLeftovers(unittest.TestCase):
     """The leftovers figure and --byproducts say what sweep can actually take."""
 

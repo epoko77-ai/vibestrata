@@ -55,6 +55,8 @@ T = {
         "s_outputs": "{n} deliverables, newest {f}.",
         "s_no_vcs": "No git: this folder is the only copy.",
         "s_unsaved": "Not backed up: {what}.",
+        "s_from": "Worked on from {f} (sessions opened there: {n}).",
+        "s_to": "Sessions opened here worked in {t} ({n}).",
         "state_line": "State: {s}",
         "first": "Mapping your projects for the first time, in the background (10–20 s). Next time you open one you've "
                  "been away from, you'll see where you left off. The whole map: npx vibestrata",
@@ -90,6 +92,8 @@ T = {
         "s_outputs": "결과물 {n}개, 최신은 {f}.",
         "s_no_vcs": "git이 없어서 이 폴더가 유일한 사본이에요.",
         "s_unsaved": "백업이 안 된 작업이 있어요: {what}.",
+        "s_from": "{f} 폴더에서 연 세션 {n}개가 실제 작업은 여기서 했어요.",
+        "s_to": "여기서 연 세션은 실제로 {t} 폴더에서 작업했어요 (세션 {n}개).",
         "state_line": "상태: {s}",
         "first": "프로젝트 지도를 처음 그리고 있어요(뒤에서 10~20초). 다음부터 오래 쉰 프로젝트를 열면 어디서 멈췄는지 "
                  "알려 드릴게요. 전체 지도: npx vibestrata",
@@ -182,6 +186,22 @@ def _unsaved(u: Dict[str, Any], lang: str) -> str:
     return " · ".join(tpl[k].replace("{n}", str(u[k])) for k in ("dirty", "unpushed", "no_remote") if u.get(k))
 
 
+def folder_label(path: str) -> str:
+    """A folder as people say it: its name, or ``~`` for home."""
+    return "~" if os.path.normpath(path) == os.path.expanduser("~") else os.path.basename(os.path.normpath(path))
+
+
+def link_lines(p: Dict[str, Any], lang: str = "en") -> List[str]:
+    """Where this project's sessions were opened, when that's another folder."""
+    L = p.get("ai_links") or {}
+    out = []
+    if L.get("from"):
+        out.append(_t(lang, "s_from", f=", ".join(folder_label(x) for x, _ in L["from"][:3]), n=sum(n for _, n in L["from"])))
+    if L.get("to"):
+        out.append(_t(lang, "s_to", t=", ".join(folder_label(x) for x, _ in L["to"][:3]), n=sum(n for _, n in L["to"])))
+    return out
+
+
 def finished_leftovers(projects: List[Dict[str, Any]], st: Dict[str, Any]) -> int:
     """Leftovers (``_workspace``, older versions) in projects whose state lets
     ``sweep --byproducts`` consider them: the figure the summary lists."""
@@ -213,6 +233,7 @@ def situation(p: Dict[str, Any], st: Dict[str, Any], lang: str = "en") -> List[s
         out.append(_t(lang, "s_handoff", q=q(why["handoff"]["q"])))
     elif s == "superseded" and why.get("sibling"):
         out.append(_t(lang, "s_sibling", n=why["sibling"]["n"]))
+    out += link_lines(p, lang)
     memo = ((st.get("notes") or {}).get(p["id"]) or {}).get("text")
     if memo:
         out.append(_t(lang, "s_memo", text=clip(memo, 300)))

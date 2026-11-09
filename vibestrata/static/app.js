@@ -731,6 +731,12 @@
     const toolSrc = s === "in-use" && ((why.tool || why.used || {}).src || "");
     const regs = (f.registered || []).filter((x) => x !== toolSrc);
     if (regs.length) out.push(t("brief.registered", { what: regs.map(regLabel).join(", ") }));
+    // sessions opened in another folder that worked here, or opened here that worked elsewhere
+    const L = p.ai_links || {};
+    const folder = (x) => { const o = projects().find((q) => q.path === x); return o ? titleOf(o) : (S.data && S.data.home === x ? "~" : x.split("/").filter(Boolean).pop() || x); };
+    const linked = (rows) => ({ names: rows.slice(0, 3).map(([x]) => folder(x)).join(", "), n: rows.reduce((sum, [, k]) => sum + k, 0) });
+    if (L.from && L.from.length) { const v = linked(L.from); out.push(t("brief.from", { f: v.names, n: v.n })); }
+    if (L.to && L.to.length) { const v = linked(L.to); out.push(t("brief.to", { to: v.names, n: v.n })); }
     const byp = (p.byproducts || {}).bytes || 0;
     out.push(t(p.reclaim ? "brief.size" : "brief.size_only", { t: bytes(p.bytes), r: bytes(p.reclaim) }) + (byp ? t("brief.size_byp", { b: bytes(byp) }) : "") + t("brief.end"));
     return out;

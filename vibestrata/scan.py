@@ -325,6 +325,10 @@ def survey(path: str, root: str, group: Optional[str], cfg: Dict[str, Any],
            claude_act: Optional[claude_mod.ClaudeActivity], pool: ThreadPoolExecutor) -> Dict[str, Any]:
     t0 = time.time()
     big_bytes = int(cfg.get("big_file_mb", 20)) * 1024 * 1024
+    # sessions opened elsewhere that worked here, or opened here that worked elsewhere
+    ai_links = claude_act.links() if claude_act else {}
+    if claude_act is not None and claude_act.empty():
+        claude_act = None
     w = _walk(path, big_bytes)
     cloud = rules.is_cloud_path(path) or w["dataless"] > 0
 
@@ -441,6 +445,7 @@ def survey(path: str, root: str, group: Optional[str], cfg: Dict[str, Any],
         "resume": segment.resume_note(path), "signals": signals,
         "state": None, "why": [], "plan": {"regen": False, "byproducts": False}, "flags": {},
         "claude": claude_act.to_json(with_prompts) if claude_act else None,
+        "ai_links": ai_links,
         "activity": {"last": last, "source": winner, **sources},
         "days": days, "status": status, "chips": chips, "pulse": pulse, "cloud": cloud,
         "scan_ms": int((time.time() - t0) * 1000),
@@ -505,8 +510,8 @@ class Scanner:
         if not os.path.isdir(path):
             return None
         cfg = load_config()
-        index = claude_mod.read_all()
         projects = [p for p in self.result.get("projects", []) if p["path"] != path]
+        index = claude_mod.relocate(claude_mod.read_all(), [p["path"] for p in projects] + [path])
         with ThreadPoolExecutor(6) as pool:
             fresh = survey(path, os.path.dirname(path), None, cfg,
                            _claude_for(path, index, [p["path"] for p in projects] + [path]), pool)
@@ -523,8 +528,8 @@ class Scanner:
         if not hit:
             return None
         cfg = load_config()
-        index = claude_mod.read_all()
         all_paths = [p["path"] for p in projects]
+        index = claude_mod.relocate(claude_mod.read_all(), all_paths)
         with ThreadPoolExecutor(6) as pool:
             fresh = survey(path, hit["root"], hit.get("group"), cfg, _claude_for(path, index, all_paths), pool)
         with self.lock:
@@ -570,8 +575,9 @@ def full_scan(progress: Optional[Dict[str, Any]] = None, workers: int = 6) -> Di
     t0 = time.time()
     cfg = load_config()
     index = claude_mod.read_all()
-    found = discover(cfg, list(index.keys()))
+    found = discover(cfg, index.hints())
     all_paths = [f[0] for f in found]
+    index = claude_mod.relocate(index, all_paths)
     progress["total"] = len(found)
     progress["done"] = 0
     projects: List[Dict[str, Any]] = []

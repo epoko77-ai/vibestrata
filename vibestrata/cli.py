@@ -104,6 +104,18 @@ def print_summary(result: dict) -> None:
                                         if any(eff[p["id"]] == k for p in ps)))
     print(f"- **Disk:** {human(t['bytes'])} · rebuildable {human(t['reclaim'])} (node_modules, .venv, caches) · "
           f"leftovers in finished projects {human(brief.finished_leftovers(ps, st))} (`_workspace`, older versions)")
+    by_path = {p["path"]: p for p in ps}
+
+    def via(p: dict) -> str:
+        """Where its sessions were opened, when that's another folder."""
+        L = p.get("ai_links") or {}
+        fmt = lambda x: f"`{by_path[x]['name']}`" if x in by_path else f"`{brief.folder_label(x)}`"  # noqa: E731
+        out = ""
+        for key, say in (("from", "worked on from {w} ({n} session{s})"), ("to", "{n} session{s} opened here worked in {w}")):
+            if L.get(key):
+                n = sum(k for _, k in L[key])
+                out += " · " + say.format(w=", ".join(fmt(x) for x, _ in L[key][:3]), n=n, s="s" if n > 1 else "")
+        return out
 
     def section(title: str, rows: list, line) -> None:
         if rows:
@@ -114,15 +126,16 @@ def print_summary(result: dict) -> None:
     last = lambda p: p["activity"]["last"] or 0  # noqa: E731
     building = sorted((p for p in ps if eff[p["id"]] == "active"), key=lambda p: -last(p))
     section("In progress" + (f" (12 most recent of {len(building)})" if len(building) > 12 else ""), building[:12],
-            lambda p: f"- **{name(p)}** ({ago(last(p))})" + (f" — now: “{p['claude']['last_prompt'][:90]}”" if (p.get("claude") or {}).get("last_prompt") else ""))
+            lambda p: f"- **{name(p)}** ({ago(last(p))})" + (f" — now: “{p['claude']['last_prompt'][:90]}”" if (p.get("claude") or {}).get("last_prompt") else "") + via(p))
     section("Stuck (the last thing you said was a problem)", sorted((p for p in ps if eff[p["id"]] == "blocked"), key=lambda p: -last(p))[:8],
-            lambda p: f"- **{name(p)}** ({ago(last(p))}){_quote(p.get('why'))}")
+            lambda p: f"- **{name(p)}** ({ago(last(p))}){_quote(p.get('why'))}{via(p)}")
     forgot = sorted((p for p in ps if eff[p["id"]] == "paused"), key=lambda p: -last(p))
     section("On hold (most recent first)", forgot[:10],
             lambda p: f"- **{name(p)}** ({ago(last(p))})"
                       + (f" — note in `{p['resume']['file']}`: {p['resume']['text'][:110]}" if p.get("resume")
                          else (f" — last asked: “{(p.get('claude') or {}).get('last_prompt', '')[:90]}”"
-                               if (p.get('claude') or {}).get('last_prompt') else (f" — {brief.summary(p, st)[:90]}" if brief.summary(p, st) else ""))))
+                               if (p.get('claude') or {}).get('last_prompt') else (f" — {brief.summary(p, st)[:90]}" if brief.summary(p, st) else "")))
+                      + via(p))
     tools = [p for p in ps if eff[p["id"]] == "in-use"]
     if tools:
         print("\n### Tools in use\n")

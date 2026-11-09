@@ -117,7 +117,7 @@ def build(p: Dict[str, Any], projects: List[Dict[str, Any]], limit: int = 4096) 
     path = p["path"]
     others = [q["path"] for q in projects]
     act: Optional[claude_mod.Activity] = None
-    for cwd, a in claude_mod.read_all().items():
+    for cwd, a in claude_mod.relocate(claude_mod.read_all(), others).items():
         if _owner(cwd, path, others):
             if act is None:
                 act = claude_mod.Activity()
