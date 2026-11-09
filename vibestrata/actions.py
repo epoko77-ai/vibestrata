@@ -14,6 +14,7 @@ Rules, enforced here and nowhere else:
 from __future__ import annotations
 
 import datetime as _dt
+import errno
 import os
 import re
 import shlex
@@ -24,7 +25,7 @@ import time
 import urllib.parse
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from . import gitinfo, rules
 from .config import home, locked, read_json, state_dir, write_json
@@ -92,13 +93,23 @@ def trash_dir(path: str) -> Optional[Path]:
     return None
 
 
-def _trash_target(trash: Path, name: str, stamp: str) -> Tuple[Path, Optional[Path]]:
-    """A free name in the Trash ("house", else "house (vibestrata 0102-1530)"),
-    and on Linux the .trashinfo file that goes with it."""
+def _trash_target(trash: Path, name: str, stamp: str,
+                  taken: Optional[Set[Path]] = None) -> Tuple[Path, Optional[Path]]:
+    """A free name in the Trash ("house", else "house (vibestrata 0102-1530)",
+    then "-2", "-3"…), and on Linux the .trashinfo file that goes with it.
+    ``taken`` holds the names already planned in this batch: they are not on
+    disk yet, so the disk alone cannot say they are spoken for."""
     files = trash if sys.platform == "darwin" else trash / "files"
     name = name.replace("/", "∕")[:200]
-    for n in (name, f"{name} (vibestrata {stamp})", f"{name} (vibestrata {stamp}-{uuid.uuid4().hex[:4]})"):
-        if not os.path.lexists(files / n):
+    taken = taken or set()
+
+    def names():
+        yield name
+        yield f"{name} (vibestrata {stamp})"
+        for k in range(2, 10000):
+            yield f"{name} (vibestrata {stamp}-{k})"
+    for n in names():
+        if files / n not in taken and not os.path.lexists(files / n):
             info = None if sys.platform == "darwin" else trash / "info" / f"{n}.trashinfo"
             return files / n, info
     raise GuardError("trash-name")
@@ -382,14 +393,20 @@ def quarantine(items: List[Dict[str, str]], label: str = "", to: str = "trash") 
         return op
     with locked(path):
         short = op_id[4:13].replace("-", "")
+        taken: Set[Path] = set()
         for i, c in enumerate(ready):
             info: Optional[Path] = None
             try:
                 trash = trash_dir(c["path"]) if to == "trash" else None
                 if trash is not None:
-                    base_name = os.path.basename(c["path"]) if c.get("kind") == "project" \
-                        else f"{os.path.basename(c['project'])} — {os.path.basename(c['path'])}"
-                    dst, info = _trash_target(trash, base_name, short)
+                    if c.get("kind") == "project":
+                        base_name = os.path.basename(c["path"])
+                    else:  # "app — pkg/__pycache__": says where it came from, and two caches don't share a name
+                        rel = os.path.relpath(c["path"], c["project"])
+                        base_name = f"{os.path.basename(c['project'])} — " \
+                            f"{os.path.basename(c['path']) if rel.startswith('..') else rel}"
+                    dst, info = _trash_target(trash, base_name, short, taken)
+                    taken.add(dst)
                 else:
                     dst = quarantine_base(c["path"]) / op_id / f"{i:03d}__{os.path.basename(c['path'])}"
             except (GuardError, OSError) as e:
@@ -410,6 +427,8 @@ def quarantine(items: List[Dict[str, str]], label: str = "", to: str = "trash") 
                     Path(item["info"]).write_text(
                         f"[Trash Info]\nPath={urllib.parse.quote(item['src'])}\n"
                         f"DeletionDate={_dt.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')}\n")
+                if os.path.lexists(item["dst"]):  # appeared since planning: rename would overwrite a file
+                    raise FileExistsError(errno.EEXIST, "already in the Trash", item["dst"])
                 os.rename(item["src"], item["dst"])
                 item["state"] = "moved"
             except OSError as e:

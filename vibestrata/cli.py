@@ -251,6 +251,10 @@ def cmd_sweep(args: argparse.Namespace) -> int:
                             f"sweep: {scope}")
     moved = [i for i in op["items"] if i["state"] == "moved"]
     print(f"\nSent {len(moved)} items · {human(sum(i['bytes'] for i in moved))} to the Trash. Empty the Trash to get the space back.")
+    failed = [i for i in op["items"] if i["state"] == "failed"]
+    if failed:
+        print(f"Could not move {len(failed)} ({human(sum(i['bytes'] for i in failed))}); they are where they were. "
+              f"First error: {failed[0].get('error', '?')}")
     if op.get("skipped"):
         print(f"Skipped {len(op['skipped'])}: " + ", ".join(sorted({s['reason'] for s in op['skipped']})))
     if moved:
@@ -523,7 +527,7 @@ def cmd_ops(_args: argparse.Namespace) -> int:
         print("no operations yet.")
     for op in ops:
         n = sum(1 for i in op["items"] if i.get("state") == "moved")
-        size = sum(i.get("bytes", 0) for i in op["items"])
+        size = sum(i.get("bytes", 0) for i in op["items"] if i.get("state") != "failed")
         where = "in the Trash" if op.get("to", "quarantine") == "trash" else "in quarantine"
         print(f"{op['id']}  {op['state']:<18} {len(op['items'])} items ({n} {where}) {human(size)}  {op.get('label','')}")
     return 0

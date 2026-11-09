@@ -712,6 +712,26 @@ class TestManage(Fixture):
         self.assertTrue((proj / "index.html").exists())
         self.assertTrue((trash / "old-site/already.txt").exists())  # never touched
 
+    def test_same_name_leftovers_get_their_own_trash_names(self) -> None:
+        # one batch, two __pycache__ in one project: the second used to collide with the first
+        (self.home / ".Trash").mkdir(exist_ok=True)
+        proj = self.home / "py-app"
+        write(proj / "tools/__pycache__/t.cpython-312.pyc", "y")
+        items = [{"project": str(proj), "path": str(proj / d / "__pycache__"), "kind": "candidate"}
+                 for d in ("pkg", "tools")]
+        op = self.actions.quarantine(items, "t")
+        self.assertEqual([i["state"] for i in op["items"]], ["moved", "moved"])
+        names = {Path(i["dst"]).name for i in op["items"] if i["in"] == "trash"}
+        if names:
+            self.assertEqual(names, {"py-app — pkg∕__pycache__", "py-app — tools∕__pycache__"})
+        self.actions.restore(op["id"])
+        self.assertTrue((proj / "pkg/__pycache__/m.cpython-312.pyc").exists())
+        self.assertTrue((proj / "tools/__pycache__/t.cpython-312.pyc").exists())
+        a, _ = self.actions._trash_target(self.home / ".Trash", "x", "s", set())
+        b, _ = self.actions._trash_target(self.home / ".Trash", "x", "s", {a})
+        c, _ = self.actions._trash_target(self.home / ".Trash", "x", "s", {a, b})
+        self.assertEqual(len({a, b, c}), 3)
+
     def test_overview_and_situation(self) -> None:
         from vibestrata import brief
         out = brief.overview(self.result, {}, lang="en", width=100)
